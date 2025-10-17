@@ -38,19 +38,34 @@ Your data stays yours. The AI only sees what it’s allowed to.
 
 ## 🚀 Quick Start Guide
 
+
 ### 1️⃣ Configure your environment
 
 Create `.env` files for backend and frontend:
 
 ```bash
 # backend/.env
-DATABASE_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
+GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
 OPENAI_API_KEY=sk-xxxxx
 PORT=8080
 
 # frontend/.env
 VITE_API_URL=http://localhost:8080
 ```
+
+### ⚙️ Environment Variable Note
+
+> If you’re using Docker, make sure your `docker-compose.yml` matches your `.env` file.  
+> For example, if your backend `.env` uses:
+> ```bash
+> GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
+> ```
+> then ensure your backend service in `docker-compose.yml` references:
+> ```yaml
+> environment:
+>   - GUARDRAILS_DB_URL=${GUARDRAILS_DB_URL}
+> ```
+> Otherwise, Prisma may fail to connect to the database.
 
 ### 2️⃣ Launch with Docker
 
