@@ -4,6 +4,8 @@
 
 Guardrail Layer bridges your **databases** and **AI models** safely, enabling LLMs to run SQL queries without exposing sensitive data.
 
+> This Project is early but fun as hell!
+
 > Think of it as LangChain for **real data**, with **guardrails built in**.
 
 ---
