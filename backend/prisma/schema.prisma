@@ -11,14 +11,12 @@ model User {
   id          String       @id @default(cuid())
   name        String?
   email       String?      @unique
-  connections Connection[]
   createdAt   DateTime     @default(now())
 }
 
 model Connection {
   id             String         @id @default(cuid())
-  userId         String?
-  user           User?          @relation(fields: [userId], references: [id])
+  userId         String?        // optional; no relation enforced
   name           String
   dbType         String
   connectionUrl  String

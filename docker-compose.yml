@@ -17,14 +17,14 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # ✅ use consistent DB var with your code & Dockerfile
       - GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrails
     ports:
       - "8080:8080"
     depends_on:
-      - guardrail-db
+      guardrail-db:
+        condition: service_healthy
     command: >
-      sh -c "npx prisma migrate deploy && node dist/index.js"
+      sh -c "npx prisma generate && npx prisma migrate deploy && node dist/index.js"
 
   guardrail-db:
     image: postgres:15
@@ -34,6 +34,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: guardrails
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     ports:
       - "5433:5432"
     volumes:
