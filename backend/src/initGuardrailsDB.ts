@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-export async function ensureDatabaseExists(url) {
+export async function ensureDatabaseExists(url: string) {
   const urlObj = new URL(url);
   const dbName = urlObj.pathname.slice(1);
   urlObj.pathname = '/postgres';

@@ -89,4 +89,6 @@ model ColumnMetadata {
   tableMetadata   TableMetadata @relation(fields: [tableMetadataId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([tableMetadataId, columnName])
 }
