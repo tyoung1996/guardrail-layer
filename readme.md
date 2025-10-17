@@ -133,11 +133,10 @@ ORDER BY overdue_count DESC;
 
 ## 🖼️ Screenshots
 
-> _Coming soon — screenshots to showcase the UI and features._
 
-![Dashboard Preview](/frontend/public/screenshots/dashboard.png)  
-![Redaction Rules Setup](/frontend/public/screenshots/redaction.png)  
-![Query Results](/frontend/public/screenshots/query-results.png)  
+![Dashboard Preview](https://raw.githubusercontent.com/tyoung1996/guardrail-layer/refs/heads/main/frontend/public/screeenshots/dashboard.png)  
+![Redaction Rules Setup](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/redaction.png?raw=true)  
+![Query Results](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/query-results.png?raw=true)  
 
 ---
 
