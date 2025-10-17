@@ -1,204 +1,249 @@
-# 🧠 Guardrail Layer
+# React + TypeScript + Vite
 
-### The Secure AI Gateway for Databases — open source, hackable, and ready for builders.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Guardrail Layer bridges your **databases** and **AI models** safely, enabling LLMs to run SQL queries without exposing sensitive data.
+Currently, two official plugins are available:
 
-> This Project is early but fun as hell!
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-> Think of it as LangChain for **real data**, with **guardrails built in**.
+## React Compiler
 
----
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## ✨ Why Guardrail Layer?
+## Expanding the ESLint configuration
 
-Most AI tools can *read* your data.  
-Very few can do it **securely**.
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-Guardrail Layer empowers developers to:
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-- ⚙️ Query live data with AI (GPT, Claude, local models)  
-- 🛡️ Redact or mask sensitive columns  
-- 🧩 Enable models to reason with metadata and schema  
-- 💬 Ask natural language questions and receive SQL + answers  
-- 🌍 Deploy anywhere — Docker, local, or cloud  
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-Your data stays yours. The AI only sees what it’s allowed to.
-
----
-
-## 🧱 Core Features
-
-- ✅ Connect any SQL database: Postgres, MySQL, MariaDB, and more  
-- 🧠 AI-powered query generation: Natural language → safe SQL → results  
-- 🧩 Metadata-aware reasoning: LLMs understand schema, foreign keys, and your notes  
-- 🔐 Column-level redaction: REMOVE, HASH, MASK, REDACT, or EXPOSE fields  
-- 🧰 Fully self-hosted & open source — own your data and stack  
-- 💬 Developer-first UI: Modern frontend to manage connections and policies  
-
----
-
-## 🚀 Quick Start Guide
-
-
-### 1️⃣ Configure your environment
-
-Create `.env` files for backend and frontend:
-
-```bash
-# backend/.env
-GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
-OPENAI_API_KEY=sk-xxxxx
-PORT=8080
-
-# frontend/.env
-VITE_API_URL=http://localhost:8080
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-### ⚙️ Environment Variable Note
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-> If you’re using Docker, make sure your `docker-compose.yml` matches your `.env` file.  
-> For example, if your backend `.env` uses:
-> ```bash
-> GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
-> ```
-> then ensure your backend service in `docker-compose.yml` references:
-> ```yaml
-> environment:
->   - GUARDRAILS_DB_URL=${GUARDRAILS_DB_URL}
-> ```
-> Otherwise, Prisma may fail to connect to the database.
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-### 2️⃣ Launch with Docker
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
 
+# 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System
+
+> **Safely expose your databases to AI, APIs, or automation layers — with built‑in redaction, schema awareness, and access control.**
+
+---
+
+## ⚡ Overview
+
+**Guardrail Layer** is an open‑source, self‑hosted system that lets you connect databases and safely query them using natural language — without exposing sensitive data.
+
+Think of it as a *secure translation layer* between your data and anything that wants to access it — AI models, scripts, automations, or dashboards.
+
+---
+
+## 🧩 Features
+
+- 🔒 **Redaction Rules:** Automatically hide or mask sensitive fields.
+- 🧠 **Schema Awareness:** AI‑ready view of your tables and relationships.
+- 💬 **Natural‑Language Queries:** Ask questions like “Show top customers by revenue.”
+- ⚙️ **Secure Connections:** Validate and manage DB credentials in a simple UI.
+- 🐳 **Self‑Hosted:** One‑line deployment with Docker Compose.
+- 🧱 **Extensible:** Built with Node.js, Prisma, Postgres, and TypeScript.
+
+---
+
+## 🛠️ Tech Stack
+
+| Area | Technology |
+|------|-------------|
+| Frontend | React, TypeScript, TailwindCSS, Vite |
+| Backend | Node.js, Express, Prisma |
+| Database | PostgreSQL |
+| Deployment | Docker Compose |
+
+---
+
+## 🚀 Quickstart
+
+### 1️⃣ Clone & Setup
 ```bash
 git clone https://github.com/tyoung1996/guardrail-layer.git
 cd guardrail-layer
-docker compose up --build
 ```
 
-### 3️⃣ Connect your database
-
-- Open http://localhost:5173  
-- Add your DB connection string  
-- Test connection ✅  
-- Apply redaction rules  
-
-Your database is now AI-ready and protected.
-
----
-
-## 🏗️ Architecture Overview
-
-| Layer          | Stack                          |
-| -------------- | ------------------------------ |
-| 🧠 AI Layer    | OpenAI, Anthropic, or local LLMs |
-| ⚙️ Backend     | Fastify + TypeScript + Prisma  |
-| 🖥️ Frontend   | React + Vite + Tailwind        |
-| 🐘 Database   | PostgreSQL (metadata & redactions) |
-| 🚢 Infrastructure | Docker Compose                |
-
----
-
-## 💡 Example Prompts & Queries
-
-```sql
--- Who took the most PTO this quarter?
-SELECT users.full_name, COUNT(*) AS pto_days
-FROM pto_details
-JOIN users ON users.id = pto_details.user_id
-WHERE QUARTER(pto_details.started_at) = QUARTER(NOW())
-GROUP BY users.full_name
-ORDER BY pto_days DESC;
-
--- What organization is most often behind on invoices?
-SELECT organization_name, COUNT(*) AS overdue_count
-FROM invoices
-WHERE status = 'overdue'
-GROUP BY organization_name
-ORDER BY overdue_count DESC;
-```
-
----
-
-## 🔐 Redaction Rules
-
-| Rule       | Description                     |
-| ---------- | ------------------------------- |
-| **REMOVE** | Excludes column from all AI access |
-| **MASK_EMAIL** | Masks partial email strings    |
-| **HASH**   | Hashes values for anonymity      |
-| **REDACT** | Replaces content with `[REDACTED]` |
-| **EXPOSE** | Removes any applied redaction     |
-
----
-
-## 🖼️ Screenshots
-
-
-![Dashboard Preview](https://raw.githubusercontent.com/tyoung1996/guardrail-layer/refs/heads/main/frontend/public/screeenshots/dashboard.png)  
-![Redaction Rules Setup](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/redaction.png?raw=true)  
-![Query Results](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/query-results.png?raw=true)  
-
----
-
-## ⚡ Developer Mode (No Docker)
-
-Prefer to run locally? No problem.
-
+### 2️⃣ Run with Docker
 ```bash
-# Backend
-cd backend
-pnpm install
-pnpm dev
-
-# Frontend
-cd ../frontend
-pnpm install
-pnpm dev
+docker compose up
 ```
 
----
+Then visit [http://localhost:5173](http://localhost:5173)
 
-## 🚧 Roadmap
-
-- Vector-based reasoning (embeddings + metadata)  
-- Role-based access control + RBAC UI  
-- Native LLM plugin support (Claude, Gemini, etc.)  
-- SQL explainability + AI debugging mode  
-- Prisma schema sync  
-- One-click deploy to Fly.io / Render / Railway  
+### 3️⃣ Connect a Database
+Use the **Connections** tab to enter your Postgres/MySQL credentials — the layer will securely validate and map your schema automatically.
 
 ---
 
-## 🤝 Contribute
+## 🧰 Example Use Case
 
-Open source means open hands.  
-
-If you’re a:  
-- 🧠 Prompt engineer (improve query generation)  
-- ⚙️ Backend dev (love Fastify / Prisma)  
-- 🎨 Designer (UI/UX obsessed)  
-- 🧩 Tinkerer (hack on open AI tools)  
-
-We want your brain. 🧬
-
-1. Fork this repo  
-2. `docker compose up`  
-3. Make something better  
-4. Submit a PR  
+| You want to... | Guardrail Layer helps you... |
+|----------------|------------------------------|
+| Connect an internal DB to ChatGPT or local LLM | Redact sensitive fields and safely allow queries |
+| Build an analytics chatbot | Query natural language → SQL securely |
+| Expose a read‑only API for automations | Control what data and rows are visible |
 
 ---
 
-## 🪪 License
+## 🤝 Contributing
 
-**Apache 2.0 License**  
-Do whatever you want — just don’t remove the guardrails. 🛡️
+We welcome early feedback and pull requests!
+
+1. Fork the repo
+2. Create a new branch (`git checkout -b feature/my-feature`)
+3. Commit your changes
+4. Open a PR
+
+If you’re interested in contributing regularly, join the upcoming Discord community (link coming soon).
 
 ---
 
-## Built With ❤️ for Builders
+## 📜 License
 
-Crafted by [Tyler Young](https://github.com/tyoung1996) — inspired by real challenges in data security and AI integration.
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
-> _Guardrail Layer — because your AI should be smart, not reckless._
+© 2025 [Tyler Young](https://github.com/tyoung1996)
+
+---
+
+### ⭐ Star the repo if you’d like to follow development and feature releases.
+# 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System
+
+> **Safely connect your databases to AI, APIs, or automations — with built‑in redaction, schema awareness, and access control.**
+
+---
+
+## ⚡ Overview
+
+**Guardrail Layer** is an open‑source, self‑hosted backend that sits between your database and any tool (LLM, automation, or dashboard).  
+It enforces **data privacy, access rules, and redaction** automatically — so you can safely query and expose data without leaking sensitive fields.
+
+---
+
+## 🧩 Features
+
+- 🔒 **Automatic Redaction** — mask emails, IDs, or sensitive values at query time  
+- 🧠 **Schema Awareness** — AI‑ready metadata for smarter, safer queries  
+- 💬 **Natural‑Language Queries** — ask “Who are our top customers by revenue?”  
+- ⚙️ **Connection Validation** — test Postgres/MySQL access through a clean UI  
+- 🐳 **Self‑Hosted** — run anywhere via Docker Compose  
+- 🧱 **Extensible** — built with Node.js, Prisma, TypeScript, and Postgres
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-------------|
+| Frontend | React, TypeScript, TailwindCSS, Vite |
+| Backend | Node.js, Express, Prisma |
+| Database | PostgreSQL |
+| Deployment | Docker Compose |
+
+---
+
+## 🚀 Quickstart
+
+### 1️⃣ Clone & Setup
+```bash
+git clone https://github.com/tyoung1996/guardrail-layer.git
+cd guardrail-layer
+```
+
+### 2️⃣ Launch with Docker
+```bash
+docker compose up
+```
+
+Then open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### 3️⃣ Connect Your Database
+Go to the **Connections** tab and enter credentials for your PostgreSQL or MySQL instance.  
+The system validates, introspects your schema, and applies safe default policies automatically.
+
+---
+
+## 🧰 Example Use Cases
+
+| Goal | Guardrail Layer Enables |
+|------|--------------------------|
+| Connect internal DB to ChatGPT / Local LLM | Redact sensitive columns & query safely |
+| Build an analytics chatbot | Translate natural language → SQL with guardrails |
+| Expose a read‑only API | Enforce row‑level access & policy‑based filters |
+
+---
+
+## 🧑‍💻 Contributing
+
+Feedback and PRs are welcome!
+
+1. Fork the repo  
+2. Create a branch: `git checkout -b feature/my-feature`  
+3. Commit changes and open a Pull Request  
+
+Community discussion (Discord & GitHub Discussions) launching soon.
+
+---
+
+## 📜 License
+
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+© 2025 [Tyler Young](https://github.com/tyoung1996)
+
+---
+
+⭐ **Star the repo** to follow new features and updates!
