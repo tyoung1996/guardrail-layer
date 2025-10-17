@@ -224,7 +224,7 @@ export default function Connections() {
                           )}
                           {c.status === "unknown" && (
                             <div className="flex items-center gap-2 text-gray-400 font-semibold select-none">
-                              <span className="w-3 h-3 rounded-full bg-gray-400 inline-block animate-pulse"></span> Checking...
+                              <span className="w-3 h-3 rounded-full bg-gray-400 inline-block animate-pulse"></span> Creating Connection...
                             </div>
                           )}
                         </td>
