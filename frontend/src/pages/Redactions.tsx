@@ -164,9 +164,9 @@ export default function Redactions() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-indigo-900 via-purple-900 to-indigo-800 px-12 py-10 overflow-x-hidden">
-      <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-lg w-full max-w-[1800px] p-10 text-gray-100 font-sans">
-        <h1 className="text-4xl font-extrabold mb-8 text-indigo-300 text-center tracking-wide">Redaction Rules</h1>
+    <div className="min-h-screen w-full bg-gradient-to-br from-[#1a1b1f] via-[#13141a] to-[#0f1014] text-gray-200">
+      <div className="w-full px-12 py-12 mx-auto">
+        <h1 className="text-4xl font-extrabold mb-8 text-gray-300 text-center tracking-wide">Redaction Rules</h1>
 
         {error && (
           <div className="mb-6 text-red-400 font-semibold text-center" role="alert">
@@ -175,50 +175,50 @@ export default function Redactions() {
         )}
 
         {loading ? (
-          <p className="text-center text-indigo-300">Loading rules and schema...</p>
+          <p className="text-center text-gray-300">Loading rules and schema...</p>
         ) : columns.length === 0 ? (
-          <p className="text-center text-indigo-300">No columns found for this connection.</p>
+          <p className="text-center text-gray-300">No columns found for this connection.</p>
         ) : (
           <>
             <div className="flex justify-end mb-6">
               <button
                 onClick={() => setShowRemovedTables(!showRemovedTables)}
-                className="bg-indigo-700 hover:bg-indigo-600 text-indigo-100 px-4 py-2 rounded-md shadow transition"
+                className="bg-[#25262c] hover:bg-[#1e1f25] text-gray-200 px-4 py-2 rounded-md shadow transition"
               >
                 {showRemovedTables ? "Hide Removed Tables" : "Show Removed Tables"}
               </button>
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-indigo-700 bg-indigo-900/40 shadow-xl w-full mx-auto p-6">
-              <table className="min-w-full w-full table-fixed text-base divide-y divide-indigo-700 border-collapse table-auto" style={{ tableLayout: "fixed", width: "100%" }}>
-                <thead className="bg-gradient-to-r from-indigo-800 to-indigo-700 border-b border-indigo-600/50">
+            <div className="overflow-x-auto border-t border-gray-800 bg-gray-800/60 shadow-inner w-full px-12 py-8 rounded-none">
+              <table className="w-full table-auto text-base divide-y divide-gray-700 border-collapse">
+                <thead className="bg-gray-900/50 border-b border-gray-800">
                   <tr>
                     <th
                       scope="col"
-                      className="px-10 py-3 text-left text-indigo-300 font-semibold tracking-wide w-[30%]"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[30%]"
                     >
                       Column
                     </th>
                     <th
                       scope="col"
-                      className="px-10 py-3 text-left text-indigo-300 font-semibold tracking-wide w-[20%]"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[20%]"
                     >
                       Rule
                     </th>
                     <th
                       scope="col"
-                      className="px-10 py-3 text-left text-indigo-300 font-semibold tracking-wide w-[20%]"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[20%]"
                     >
                       Replacement Text
                     </th>
                     <th
                       scope="col"
-                      className="px-10 py-3 text-left text-indigo-300 font-semibold tracking-wide w-[15%]"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[15%]"
                     >
                       Action
                     </th>
                     <th
                       scope="col"
-                      className="px-10 py-3 text-left text-indigo-300 font-semibold tracking-wide w-[15%]"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[15%]"
                     >
                     </th>
                   </tr>
@@ -231,7 +231,7 @@ export default function Redactions() {
                   const isCollapsed = collapsedTables[tableName];
                   return (
                     <React.Fragment key={tableName}>
-                      <tr className="bg-gradient-to-r from-indigo-800/80 to-indigo-700/80 hover:from-indigo-700/90 hover:to-indigo-600/90 text-indigo-100 font-semibold uppercase tracking-wide text-base rounded-md shadow-md transition-all duration-300 !my-0 border-b border-indigo-700/30">
+                      <tr className="bg-[#1e1f25] hover:bg-[#25262c] text-gray-200 font-semibold uppercase tracking-wide text-base rounded-md shadow-md transition-all duration-300 !my-0 border-b border-gray-800/70">
                         <td colSpan={5} className="px-8 py-2">
                           <div className="flex justify-between items-center w-full">
                             <span className="text-lg font-bold">{tableName}</span>
@@ -241,13 +241,13 @@ export default function Redactions() {
                                   e.stopPropagation();
                                   await handleTableRuleChange(tableName, "REMOVE");
                                 }}
-                                className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-6 py-2 rounded-md text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+                                className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-md text-sm font-semibold shadow-md hover:shadow-lg transition-all"
                               >
                                 Remove All Columns
                               </button>
                               <span
                                 onClick={() => toggleTable(tableName)}
-                                className="text-indigo-300 text-sm bg-indigo-700/40 hover:bg-indigo-600/60 px-5 py-2 rounded-md shadow-inner cursor-pointer transition whitespace-nowrap"
+                                className="text-gray-300 text-sm bg-gray-800/60 hover:bg-gray-700/70 px-5 py-2 rounded-md shadow-inner cursor-pointer transition whitespace-nowrap"
                               >
                                 {isCollapsed ? "▶ Show Columns" : "▼ Hide Columns"}
                               </span>
@@ -256,7 +256,7 @@ export default function Redactions() {
                         </td>
                       </tr>
                       <tbody
-                        className={`bg-indigo-900/20 transition-all duration-500 ease-in-out overflow-hidden`}
+                        className={`bg-gray-900/20 transition-all duration-500 ease-in-out overflow-hidden`}
                         style={{
                           display: isCollapsed ? "none" : "table-row-group",
                           transition: "all 0.35s ease-in-out",
@@ -269,7 +269,7 @@ export default function Redactions() {
                           <tr>
                             <td colSpan={5} className="!px-0" style={{ paddingLeft: 0, paddingRight: 0 }}>
                               <div
-                                className="bg-indigo-800/70 backdrop-blur-md rounded-lg p-6 mb-6 shadow-inner flex flex-col gap-4 transition-opacity duration-500 ease-in-out w-full max-w-none col-span-full"
+                                className="bg-[#25262c] rounded-lg p-6 mb-6 shadow-inner flex flex-col gap-4 transition-opacity duration-500 ease-in-out w-full max-w-none col-span-full"
                                 style={{
                                   width: "100%",
                                   gridColumn: "1 / -1",
@@ -278,10 +278,10 @@ export default function Redactions() {
                                 }}
                               >
                                 <div className="flex flex-col md:flex-row md:items-center md:gap-6">
-                                  <label className="text-indigo-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-description`}>Description:</label>
+                                  <label className="text-gray-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-description`}>Description:</label>
                                   <textarea
                                     id={`${tableName}-description`}
-                                    className="flex-grow bg-indigo-900/40 text-indigo-100 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    className="flex-grow bg-gray-900/40 text-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
                                     rows={2}
                                     value={metadata[tableName]?.description || ""}
                                     onChange={(e) =>
@@ -296,10 +296,10 @@ export default function Redactions() {
                                   />
                                 </div>
                                 <div className="flex flex-col md:flex-row md:items-center md:gap-6">
-                                  <label className="text-indigo-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-notes`}>Notes:</label>
+                                  <label className="text-gray-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-notes`}>Notes:</label>
                                   <textarea
                                     id={`${tableName}-notes`}
-                                    className="flex-grow bg-indigo-900/40 text-indigo-100 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    className="flex-grow bg-gray-900/40 text-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
                                     rows={2}
                                     value={metadata[tableName]?.notes || ""}
                                     onChange={(e) =>
@@ -314,10 +314,10 @@ export default function Redactions() {
                                   />
                                 </div>
                                 <div className="flex flex-col md:flex-row md:items-center md:gap-6">
-                                  <label className="text-indigo-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-tags`}>Tags:</label>
+                                  <label className="text-gray-300 font-semibold w-full md:w-32" htmlFor={`${tableName}-tags`}>Tags:</label>
                                   <div className="flex-grow">
                                     <div
-                                      className="flex flex-wrap items-center gap-y-2 gap-x-0 bg-indigo-900/40 rounded-md px-3 py-2 min-h-[42px] transition-all"
+                                      className="flex flex-wrap items-center gap-y-2 gap-x-0 bg-gray-900/40 rounded-md px-3 py-2 min-h-[42px] transition-all"
                                       style={{ minHeight: 42 }}
                                       onClick={() => {
                                         // Focus the input when clicking container
@@ -328,7 +328,7 @@ export default function Redactions() {
                                       {metadata[tableName]?.tags?.map((tag, tagIdx) => (
                                         <span
                                           key={tag + tagIdx}
-                                          className="bg-indigo-700 text-indigo-100 px-2 py-1 rounded-full mr-2 mb-2 flex items-center gap-1 animate-fadein"
+                                          className="bg-[#1e1f25] text-gray-200 px-2 py-1 rounded-full mr-2 mb-2 flex items-center gap-1 animate-fadein"
                                           style={{
                                             animation: "fadein 0.2s",
                                             transition: "opacity 0.2s, transform 0.2s",
@@ -348,7 +348,7 @@ export default function Redactions() {
                                                 },
                                               }));
                                             }}
-                                            className="ml-1 text-indigo-200 hover:text-red-300 focus:outline-none"
+                                            className="ml-1 text-gray-300 hover:text-red-400 focus:outline-none"
                                             style={{
                                               background: "none",
                                               border: "none",
@@ -366,7 +366,7 @@ export default function Redactions() {
                                       <input
                                         id={`${tableName}-tags-input`}
                                         type="text"
-                                        className="bg-transparent text-indigo-100 focus:outline-none min-w-[50px] flex-1 py-1"
+                                        className="bg-transparent text-gray-200 focus:outline-none min-w-[50px] flex-1 py-1"
                                         style={{ outline: "none", border: "none" }}
                                         value={tagInputs[tableName] || ""}
                                         onChange={(e) => {
@@ -462,7 +462,7 @@ export default function Redactions() {
                                 <div className="flex justify-end">
                                   <button
                                     onClick={() => saveMetadata(tableName)}
-                                    className="bg-indigo-700 hover:bg-indigo-600 text-indigo-100 px-6 py-2 rounded-md shadow transition font-semibold"
+                                    className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-md shadow transition font-semibold"
                                   >
                                     Save Metadata
                                   </button>
@@ -474,20 +474,20 @@ export default function Redactions() {
                         {cols.map((col) => {
                           const rule = rules.find((r) => r.columnName === col.name);
                           return (
-                            <tr key={col.name} className="hover:bg-indigo-800/50 transition-all duration-200 ease-in-out">
-                              <td className="px-10 py-4 w-[30%] text-indigo-100 font-medium">
+                            <tr key={col.name} className="hover:bg-gray-800/50 transition-all duration-200 ease-in-out">
+                              <td className="px-10 py-4 w-[30%] text-gray-200 font-medium">
                                 {col.name}
                               </td>
-                              <td className="px-10 py-4 w-[20%] text-indigo-200">
+                              <td className="px-10 py-4 w-[20%] text-gray-200">
                                 {rule?.ruleType || "EXPOSE"}
                               </td>
-                              <td className="px-10 py-4 w-[20%] text-indigo-300 italic truncate">
+                              <td className="px-10 py-4 w-[20%] text-gray-300 italic truncate">
                                 {rule?.replacementText || "-"}
                               </td>
                               <td className="px-10 py-4 w-[15%]">
                                 <select
                                   aria-label={`Select rule for column ${col.name}`}
-                                  className="bg-indigo-700 text-indigo-100 px-3 py-1 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                  className="bg-[#25262c] text-gray-200 px-3 py-1 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                                   value={rule?.ruleType || "EXPOSE"}
                                   onChange={async (e) => {
                                     await handleRuleChange(col, e.target.value as Rule["ruleType"]);
