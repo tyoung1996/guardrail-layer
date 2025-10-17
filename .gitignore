@@ -1,0 +1,57 @@
+# Node
+node_modules
+pnpm-lock.yaml
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist
+build
+out
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+frontend/.env
+backend/.env
+
+# Logs
+logs
+*.log
+debug.log
+error.log
+
+# IDE & system
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Docker
+docker-compose.override.yml
+docker-data/
+*.pid
+*.seed
+
+# Coverage & testing
+coverage/
+*.lcov
+jest-cache/
+jest-html-reporters-*
+__pycache__/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+frontend/.cache/
+backend/.cache/
+
+# Mac + OS
+Thumbs.db

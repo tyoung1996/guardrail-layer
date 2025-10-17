@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("GUARDRAILS_DB_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  name        String?
+  email       String?      @unique
+  connections Connection[]
+  createdAt   DateTime     @default(now())
+}
+
+model Connection {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  name           String
+  dbType         String
+  connectionUrl  String
+  status         String         @default("unknown") // active | down | checking | unknown
+  lastChecked    DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+  rules          GuardrailRule[]
+  queries        QueryLog[]
+  redactions     RedactionRule[]
+  tableMetadata  TableMetadata[]
+}
+
+model GuardrailRule {
+  id           String      @id @default(cuid())
+  connectionId String
+  table        String
+  column       String
+  rule         String
+  createdAt    DateTime    @default(now())
+  connection   Connection  @relation(fields: [connectionId], references: [id])
+}
+
+model QueryLog {
+  id           String      @id @default(cuid())
+  connectionId String
+  query        String
+  redacted     Boolean
+  createdAt    DateTime    @default(now())
+  connection   Connection  @relation(fields: [connectionId], references: [id])
+}
+
+model RedactionRule {
+  id            String   @id @default(cuid())
+  connectionId  String
+  tableName     String
+  columnName    String
+  ruleType      String   // e.g., "mask", "hash", "remove", "replace"
+  replacement   String?  // e.g., "***REDACTED***" or null
+  createdAt     DateTime @default(now())
+
+  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+model TableMetadata {
+  id            String   @id @default(cuid())
+  connectionId  String
+  tableName     String
+  description   String?
+  notes         String?
+  tags          String[] @default([])
+
+  columns       ColumnMetadata[]
+  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([connectionId, tableName])
+}
+
+model ColumnMetadata {
+  id              String   @id @default(cuid())
+  tableMetadataId String
+  columnName      String
+  description     String?
+  example         String?
+  importance      Int?
+
+  tableMetadata   TableMetadata @relation(fields: [tableMetadataId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

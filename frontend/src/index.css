@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'InterVariable', ui-sans-serif, system-ui, sans-serif;
+  --color-bg-dark: #0f1115;
+  --color-text-base: #e5e7eb;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg-dark);
+    color: var(--color-text-base);
+  }
+
+  body {
+    background-image: linear-gradient(to bottom, #0f1115, #151821, #0e1014);
+    color: var(--color-text-base);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input,
+  button,
+  textarea {
+    outline: none;
+  }
+}

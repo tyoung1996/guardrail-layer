@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Connection" ADD COLUMN     "lastChecked" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'unknown';
