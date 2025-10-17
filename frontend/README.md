@@ -153,8 +153,97 @@ If you’re interested in contributing regularly, join the upcoming Discord comm
 
 ## 📜 License
 
-MIT © [Tyler Young](https://github.com/tyoung1996)
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+© 2025 [Tyler Young](https://github.com/tyoung1996)
 
 ---
 
 ### ⭐ Star the repo if you’d like to follow development and feature releases.
+# 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System
+
+> **Safely connect your databases to AI, APIs, or automations — with built‑in redaction, schema awareness, and access control.**
+
+---
+
+## ⚡ Overview
+
+**Guardrail Layer** is an open‑source, self‑hosted backend that sits between your database and any tool (LLM, automation, or dashboard).  
+It enforces **data privacy, access rules, and redaction** automatically — so you can safely query and expose data without leaking sensitive fields.
+
+---
+
+## 🧩 Features
+
+- 🔒 **Automatic Redaction** — mask emails, IDs, or sensitive values at query time  
+- 🧠 **Schema Awareness** — AI‑ready metadata for smarter, safer queries  
+- 💬 **Natural‑Language Queries** — ask “Who are our top customers by revenue?”  
+- ⚙️ **Connection Validation** — test Postgres/MySQL access through a clean UI  
+- 🐳 **Self‑Hosted** — run anywhere via Docker Compose  
+- 🧱 **Extensible** — built with Node.js, Prisma, TypeScript, and Postgres
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-------------|
+| Frontend | React, TypeScript, TailwindCSS, Vite |
+| Backend | Node.js, Express, Prisma |
+| Database | PostgreSQL |
+| Deployment | Docker Compose |
+
+---
+
+## 🚀 Quickstart
+
+### 1️⃣ Clone & Setup
+```bash
+git clone https://github.com/tyoung1996/guardrail-layer.git
+cd guardrail-layer
+```
+
+### 2️⃣ Launch with Docker
+```bash
+docker compose up
+```
+
+Then open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### 3️⃣ Connect Your Database
+Go to the **Connections** tab and enter credentials for your PostgreSQL or MySQL instance.  
+The system validates, introspects your schema, and applies safe default policies automatically.
+
+---
+
+## 🧰 Example Use Cases
+
+| Goal | Guardrail Layer Enables |
+|------|--------------------------|
+| Connect internal DB to ChatGPT / Local LLM | Redact sensitive columns & query safely |
+| Build an analytics chatbot | Translate natural language → SQL with guardrails |
+| Expose a read‑only API | Enforce row‑level access & policy‑based filters |
+
+---
+
+## 🧑‍💻 Contributing
+
+Feedback and PRs are welcome!
+
+1. Fork the repo  
+2. Create a branch: `git checkout -b feature/my-feature`  
+3. Commit changes and open a Pull Request  
+
+Community discussion (Discord & GitHub Discussions) launching soon.
+
+---
+
+## 📜 License
+
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+© 2025 [Tyler Young](https://github.com/tyoung1996)
+
+---
+
+⭐ **Star the repo** to follow new features and updates!
