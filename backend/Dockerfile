@@ -11,6 +11,9 @@ RUN pnpm install --frozen-lockfile
 # Copy rest of backend source
 COPY . .
 
+# 🧩 Generate Prisma client before building
+RUN npx prisma generate
+
 # Build the TypeScript code
 RUN pnpm run build
 
