@@ -1,56 +1,87 @@
+# 🧠 Guardrail Layer  
+### _The Secure AI Gateway for Databases — open source, hackable, and ready for builders._
 
+Guardrail Layer connects your **databases** to **AI models** — safely.  
+It’s the missing middle layer that lets LLMs run SQL queries without exposing sensitive data.
 
-# 🛡️ Guardrail Layer  
-**Secure AI Data Gateway for Databases**
+> Think of it as Supabase meets LangChain — but for **real data**, with **guardrails built in**.
 
-Guardrail Layer lets you connect your SQL databases directly to AI models — safely.  
-It automatically **redacts sensitive data**, interprets **natural-language queries**, and executes them securely against your schema using metadata-aware reasoning.
-
-Built with **TypeScript**, **Fastify**, and **Vite**, it ships with Docker support and an intuitive UI for configuring database connections and redaction rules.
-
----
-
-## 🚀 Features
-- 🧩 **Connect any database** (MySQL, PostgreSQL, etc.)
-- 🧠 **Natural-language querying** — “Who took the most PTO?” → SQL in seconds  
-- 🛡️ **Column-level redaction** — remove, hash, or mask sensitive fields  
-- 🧰 **Schema-aware AI reasoning** — uses metadata to craft safe SQL  
-- ⚙️ **Self-hostable** — run locally or on your own server  
-- 🧱 **Docker-ready** — one command brings up the full stack (frontend + backend + DB)
+Still early. Still raw. Already powerful. 🚀  
 
 ---
 
-## 🏗️ Tech Stack
-| Layer | Tech |
-|-------|------|
-| Frontend | React + Vite + TailwindCSS |
-| Backend | Fastify + TypeScript + Prisma |
-| Database | PostgreSQL |
-| AI Layer | OpenAI / custom LLM |
-| DevOps | Docker Compose |
+## 🌟 Why it exists
+
+Most AI tools can _read_ your data.  
+Very few can do it **safely**.
+
+Guardrail Layer is built for developers who want to:
+- ⚙️ **Query live data with AI** (GPT, Claude, local models)
+- 🛡️ **Redact or mask sensitive columns**
+- 🧩 **Let models reason with metadata** and schema
+- 💬 **Ask natural language questions** — get SQL + answers
+- 🌍 **Deploy anywhere** — Docker, local, or cloud
+
+Your data stays yours. The AI only sees what it’s allowed to.
 
 ---
 
-## 🧰 Quick Start
+## 🧱 Features
 
-### 1️⃣ Clone and run with Docker
+✅ **Connect any SQL database**  
+Postgres, MySQL, MariaDB, etc.
+
+🧠 **AI-powered query generation**  
+Natural language → safe SQL → results.
+
+🧩 **Metadata-aware reasoning**  
+LLMs understand schema, foreign keys, and your notes.
+
+🔐 **Column-level redaction**  
+Mark fields as REMOVE, HASH, MASK, REDACT, or EXPOSE.
+
+🧰 **Self-hosted + open source**  
+You own it. Run it anywhere.
+
+💬 **Developer-first UI**  
+Modern frontend to manage connections and policies.
+
+---
+
+## 🏗️ Architecture Overview
+
+| Layer | Stack |
+|-------|-------|
+| 🧠 **AI Layer** | OpenAI, Anthropic, or local LLMs |
+| ⚙️ **Backend** | Fastify + TypeScript + Prisma |
+| 🖥️ **Frontend** | React + Vite + Tailwind |
+| 🐘 **Database** | PostgreSQL (for metadata + redactions) |
+| 🚢 **Infra** | Docker Compose |
+
+---
+
+## ⚡ Quick Start
+
+### 1️⃣ Clone + Launch with Docker
+
 ```bash
 git clone https://github.com/tyoung1996/guardrail-layer.git
 cd guardrail-layer
 docker compose up --build
 ```
 
-This spins up:
-- 🧠 Backend → [http://localhost:8080](http://localhost:8080)  
-- 💻 Frontend → [http://localhost:5173](http://localhost:5173)  
-- 🗃️ Local PostgreSQL container (`guardrail-db`)
+Your stack spins up:
+
+| Service | URL |
+|----------|-----|
+| 🧠 Backend | http://localhost:8080 |
+| 💻 Frontend | http://localhost:5173 |
+| 🗃️ Database | guardrail-db (Postgres) |
 
 ---
 
-### 2️⃣ Configure your environment
-Create `.env` files for both backend and frontend based on `.env.example`.
+### 2️⃣ Configure your `.env` files
 
-#### Example
 ```bash
 # backend/.env
 DATABASE_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrail
@@ -64,14 +95,52 @@ VITE_API_URL=http://localhost:8080
 ---
 
 ### 3️⃣ Connect your database
-1. Open [http://localhost:5173](http://localhost:5173)
-2. Add your database connection string (MySQL, PostgreSQL, etc.)
-3. Test → Add → Configure redaction rules per column
+
+1. Open http://localhost:5173  
+2. Add your DB connection string  
+3. Test it ✅  
+4. Apply redaction rules  
+
+Done — your database is now AI-ready and protected.
 
 ---
 
-## 🧪 Local Development (without Docker)
-Run each service independently:
+## 💡 Example Prompts
+
+```text
+"Who took the most PTO this quarter?"
+→ SELECT users.full_name, COUNT(*) AS pto_days
+  FROM pto_details
+  JOIN users ON users.id = pto_details.user_id
+  WHERE QUARTER(pto_details.started_at) = QUARTER(NOW())
+  GROUP BY users.full_name
+  ORDER BY pto_days DESC;
+
+"What organization is most often behind on invoices?"
+→ SELECT organization_name, COUNT(*) AS overdue_count
+  FROM invoices
+  WHERE status = 'overdue'
+  GROUP BY organization_name
+  ORDER BY overdue_count DESC;
+```
+
+---
+
+## 🧱 Redaction Rules
+
+| Rule | Description |
+|------|--------------|
+| **REMOVE** | Excludes column from all AI access |
+| **MASK_EMAIL** | Masks partial email strings |
+| **HASH** | Hashes values for anonymity |
+| **REDACT** | Replaces content with `[REDACTED]` |
+| **EXPOSE** | Removes any applied redaction |
+
+---
+
+## 🔍 Developer Mode (no Docker)
+
+Prefer running locally? Totally fine.
 
 ```bash
 # Backend
@@ -87,64 +156,45 @@ pnpm dev
 
 ---
 
-## 🧠 Example Queries
-```text
-"What organization is most often late on invoices?"
-→ SELECT organization_name, COUNT(*) AS late_invoices
-  FROM invoices
-  WHERE status = 'overdue'
-  GROUP BY organization_name
-  ORDER BY late_invoices DESC;
+## 🚀 Roadmap
 
-"Who took the most PTO in September?"
-→ SELECT users.full_name, COUNT(*) AS pto_days
-  FROM pto_details
-  JOIN users ON users.id = pto_details.user_id
-  WHERE MONTH(pto_details.date) = 9
-  GROUP BY users.full_name
-  ORDER BY pto_days DESC;
-```
+- [ ] Vector-based reasoning (embeddings + metadata)  
+- [ ] Role-based access + RBAC UI  
+- [ ] Native LLM plugin support (Claude, Gemini, etc.)  
+- [ ] SQL explainability + AI debugging mode  
+- [ ] Supabase + Prisma schema sync  
+- [ ] Deploy to Fly.io / Render / Railway one-click  
 
 ---
 
-## 🛡️ Redaction Rules
-| Rule Type | Description |
-|------------|-------------|
-| **REMOVE** | Completely removes the column from model context |
-| **MASK_EMAIL** | Masks email addresses (e.g., j***@domain.com) |
-| **HASH** | Hashes data to anonymize |
-| **REDACT** | Replaces with placeholder text |
-| **EXPOSE** | Removes any existing redaction for that field |
+## 🤝 Contribute
 
----
+Open source means open hands.  
 
-## 🧑‍💻 Contributing
-Contributions are welcome!  
-Whether you want to improve the AI reasoning engine, add new database drivers, or polish the UI — PRs are open.
+If you’re a:
+- 🧠 Prompt engineer (improve query generation)
+- ⚙️ Backend dev (love Fastify / Prisma)
+- 🎨 Designer (UI/UX obsessed)
+- 🧩 Tinkerer (wants to hack on open AI tools)
+
+...we want your brain. 🧬
 
 1. Fork this repo  
-2. Create a feature branch  
-3. Run locally using `docker compose up`  
-4. Submit a pull request  
+2. `docker compose up`  
+3. Make something better  
+4. Submit a PR  
 
 ---
 
 ## 🪪 License
-Licensed under the **MIT License** — use, modify, and self-host freely.
+**Apache 2.0 License**  
+Do whatever you want — just don’t remove the guardrails. 🛡️
 
 ---
 
-## 🌟 Roadmap
-- [ ] Vector-based query understanding (metadata + embeddings)
-- [ ] Support for Snowflake / BigQuery
-- [ ] Role-based access controls
-- [ ] AI query-explanation mode
-- [ ] Auto-syncing metadata from Supabase / Prisma schema
+## ❤️ Credits
 
----
-
-## 💬 Credits
 Built by [**Tyler Young**](https://github.com/tyoung1996)  
-Inspired by the need for **secure AI access to production databases**.
+Inspired by real problems in data security + AI integration.
 
-> _Guardrail Layer — because your data deserves protection before intelligence._
+> _Guardrail Layer — because your AI should be smart, not reckless._
