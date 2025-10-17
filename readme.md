@@ -100,6 +100,7 @@ This project is still evolving, and your feedback can shape the future.
 
 *(Community vibes incoming — Discord & GitHub Discussions launching soon!)*  
 Jump in, say hi, and help us build something awesome together.  
+https://discord.gg/tDuPDAeypR
 
 ---
 
