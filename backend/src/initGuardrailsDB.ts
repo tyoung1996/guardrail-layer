@@ -1,9 +1,9 @@
 import { execSync } from 'child_process';
 import { Client } from 'pg';
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
-
+const { PrismaClient } = pkg;
 export async function ensureDatabaseExists(url: string) {
   const urlObj = new URL(url);
   const dbName = urlObj.pathname.slice(1);
