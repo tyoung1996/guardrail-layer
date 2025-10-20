@@ -4,6 +4,21 @@ import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+function renderStars(rating: number) {
+  const stars = [];
+  const roundedRating = Math.round(rating * 2) / 2; // round to nearest 0.5
+  for (let i = 1; i <= 5; i++) {
+    if (i <= roundedRating) {
+      stars.push(<span key={i} style={{ color: "#facc15" }}>★</span>);
+    } else if (i - 0.5 === roundedRating) {
+      stars.push(<span key={i} style={{ color: "#facc15" }}>★</span>);
+    } else {
+      stars.push(<span key={i} style={{ color: "#555" }}>☆</span>);
+    }
+  }
+  return <span style={{ whiteSpace: "nowrap" }}>{stars}</span>;
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
     { role: "assistant", content: "👋 Hello! Ask me anything about your data." },
@@ -78,22 +93,48 @@ export default function ChatPage() {
           <div className="rounded-3xl border border-white/20 bg-white/5 backdrop-blur-2xl shadow-2xl flex flex-col h-[75vh]">
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} transition-all`}
-                >
+              {messages.map((msg, idx) => {
+                if (msg.role === "assistant") {
+                  // Detect "average rating of X" pattern
+                  const ratingRegex = /average rating of (\d+(\.\d+)?)/i;
+                  const match = msg.content.match(ratingRegex);
+                  if (match) {
+                    const ratingNum = parseFloat(match[1]);
+                    // Replace the numeric rating with stars inline
+                    const parts = msg.content.split(ratingRegex);
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex justify-start transition-all`}
+                      >
+                        <div
+                          className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap leading-relaxed bg-[#10131a]/80 border border-white/10 text-gray-100`}
+                        >
+                          {parts[0]}
+                          {renderStars(ratingNum)}
+                          {parts.slice(2).join('')}
+                        </div>
+                      </div>
+                    );
+                  }
+                }
+                return (
                   <div
-                    className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white"
-                        : "bg-[#10131a]/80 border border-white/10 text-gray-100"
-                    }`}
+                    key={idx}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} transition-all`}
                   >
-                    {msg.content}
+                    <div
+                      className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white"
+                          : "bg-[#10131a]/80 border border-white/10 text-gray-100"
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {loading && <div className="text-gray-400 text-sm italic">Thinking…</div>}
             </div>
 
