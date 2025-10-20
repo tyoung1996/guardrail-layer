@@ -26,9 +26,12 @@ Think of it as your data’s very own bodyguard, keeping things safe while you f
 
 ## 📸 Screenshots / Demo
 
-![Dashboard Screenshot](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/dashboard.png?raw=true)
-![Connection Validation UI](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/redaction.png?raw=true)
-![Query Redaction Example](https://github.com/tyoung1996/guardrail-layer/blob/main/frontend/public/screeenshots/query-results.png?raw=true)
+
+
+https://github.com/user-attachments/assets/3be95196-4986-4de3-a8d6-24b756f2600c
+
+
+
 
 *(More demos and GIFs coming soon!)*  
 
