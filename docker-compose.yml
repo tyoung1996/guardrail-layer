@@ -23,6 +23,8 @@ services:
     depends_on:
       guardrail-db:
         condition: service_healthy
+      guardrail-demo-db:
+        condition: service_healthy
     command: >
       sh -c "npx prisma generate && npx prisma migrate deploy && node dist/index.js"
 
@@ -44,5 +46,24 @@ services:
     volumes:
       - guardrail_data:/var/lib/postgresql/data
 
+  guardrail-demo-db:
+    image: postgres:15
+    container_name: guardrail-demo-db
+    restart: always
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: guardrail_demo
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./demo-data/init-demo.sql:/docker-entrypoint-initdb.d/init-demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d guardrail_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   guardrail_data:
+  demo_data:
