@@ -8,6 +8,7 @@
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
 - [Quickstart](#-quickstart)
+  - [Launch with Docker](#-launch-with-docker)
 - [Example Use Cases](#-example-use-cases)
 - [Contributing](#-contributing)
 - [License](#-license)
@@ -45,6 +46,7 @@ https://github.com/user-attachments/assets/3be95196-4986-4de3-a8d6-24b756f2600c
 - ⚙️ **Connection Validation** — test Postgres/MySQL access through a clean UI  
 - 🐳 **Self‑Hosted** — run anywhere via Docker Compose  
 - 🧱 **Extensible** — built with Node.js, Prisma, TypeScript, and Postgres  
+- 🧪 **One‑Click Demo Database** — instantly explore Guardrail Layer with realistic sample data
 
 ---
 
@@ -69,11 +71,28 @@ cd guardrail-layer
 *(Grab some ☕ — you’re about to make your data way safer!)*
 
 ### 2️⃣ Launch with Docker  
+Make sure you’ve created your `.env` file first (copy from `.env.example):
+
 ```bash
+cp .env.example .env
+```
+
+Then, build and start the containers:
+
+```bash
+docker compose build
 docker compose up
 ```
-Then open [http://localhost:5173](http://localhost:5173) in your browser.  
-*(Watch the magic happen — early but already pretty slick!)*
+
+Once running, open the app at **http://localhost:5173**.
+
+### 4️⃣ Try the Built-In Demo Database  
+If you just want to explore without connecting your own DB, enable demo mode in your environment file:
+
+```bash
+VITE_ALLOW_DEMO_DB=true
+```
+Then restart Docker. You’ll see a **“Connect Demo Database”** button in the UI — click it to spin up a ready‑to‑use PostgreSQL database (`guardrail_demo`) with realistic data like customers, orders, and employees.
 
 ### 3️⃣ Connect Your Database  
 Go to the **Connections** tab and enter credentials for your PostgreSQL or MySQL instance.  
@@ -104,6 +123,16 @@ This project is still evolving, and your feedback can shape the future.
 *(Community vibes incoming — Discord & GitHub Discussions launching soon!)*  
 Jump in, say hi, and help us build something awesome together.  
 https://discord.gg/tDuPDAeypR
+
+---
+
+## ⚙️ Environment Variables
+
+| Variable | Description | Default |
+|-----------|--------------|----------|
+| `VITE_API_URL` | URL of the backend API | `http://localhost:8080` |
+| `VITE_ALLOW_DEMO_DB` | Enables the “Connect Demo Database” button | `false` |
+| `VITE_DEMO_DB_URL` | Connection string for the demo PostgreSQL database | `postgresql://demo:demo@guardrail-demo-db:5432/guardrail_demo` |
 
 ---
 

@@ -9,6 +9,7 @@ import {
 import { TrashIcon } from "@heroicons/react/24/outline";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const SHOW_DEMO = import.meta.env.VITE_ALLOW_DEMO_DB === "true";
 
 export default function Connections() {
   const [connections, setConnections] = useState<any[]>([]);
@@ -18,6 +19,7 @@ export default function Connections() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedConn, setSelectedConn] = useState<any>(null);
   const navigate = useNavigate();
+  const demoExists = connections.some((c) => c.name === "Demo Database");
 
   async function fetchConnections() {
     try {
@@ -30,6 +32,10 @@ export default function Connections() {
   }
 
   async function addConnection() {
+    if (!newConn.name || !newConn.connectionUrl) {
+      alert("⚠️ Please fill in all fields before adding a connection.");
+      return;
+    }
     await axios.post(`${API_URL}/connections`, {
       ...newConn,
       userId: "demo-user-1",
@@ -40,7 +46,26 @@ export default function Connections() {
     fetchConnections();
   }
 
+  async function addDemoConnection() {
+    try {
+      await axios.post(`${API_URL}/connections`, {
+        name: "Demo Database",
+        dbType: "postgres",
+        connectionUrl: import.meta.env.VITE_DEMO_DB_URL,
+        userId: "demo-user-1",
+      });
+      fetchConnections();
+    } catch (err: any) {
+      console.error("❌ Failed to add demo connection:", err.message);
+    }
+  }
+
   async function testConnection() {
+    if (!newConn.connectionUrl) {
+      setTestStatus("error");
+      setTestMessage("⚠️ Please enter a connection URL first.");
+      return;
+    }
     setTestStatus("loading");
     setTestMessage("");
     try {
@@ -145,6 +170,25 @@ export default function Connections() {
               <PlusCircleIcon className="w-5 h-5" />
               Add Connection
             </button>
+            {SHOW_DEMO && (
+              demoExists ? (
+                <button
+                  disabled
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-yellow-800 cursor-not-allowed opacity-60 text-black font-semibold shadow-sm select-none"
+                >
+                  <Cog6ToothIcon className="w-5 h-5" />
+                  Demo Connected
+                </button>
+              ) : (
+                <button
+                  onClick={addDemoConnection}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-black font-semibold shadow-sm select-none"
+                >
+                  <Cog6ToothIcon className="w-5 h-5" />
+                  Connect Demo Database
+                </button>
+              )
+            )}
           </div>
 
           {/* Test status */}
