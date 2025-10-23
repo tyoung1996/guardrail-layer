@@ -6,6 +6,7 @@ export default function Layout() {
   const navItems = [
     { to: "/", label: "Connections" },
     { to: "/chat", label: "Chat" },
+    { to: "/audit", label: "Audit Log" },
   ];
 
   return (

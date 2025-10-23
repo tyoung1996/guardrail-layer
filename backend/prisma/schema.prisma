@@ -8,85 +8,103 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  name        String?
-  email       String?      @unique
-  createdAt   DateTime     @default(now())
+  id        String   @id @default(cuid())
+  name      String?
+  email     String?  @unique
+  createdAt DateTime @default(now())
 }
 
 model Connection {
-  id             String         @id @default(cuid())
-  userId         String?        // optional; no relation enforced
-  name           String
-  dbType         String
-  connectionUrl  String
-  status         String         @default("unknown") // active | down | checking | unknown
-  lastChecked    DateTime       @default(now())
-  createdAt      DateTime       @default(now())
-  rules          GuardrailRule[]
-  queries        QueryLog[]
-  redactions     RedactionRule[]
-  tableMetadata  TableMetadata[]
+  id            String          @id @default(cuid())
+  userId        String? // optional; no relation enforced
+  name          String
+  dbType        String
+  connectionUrl String
+  status        String          @default("unknown") // active | down | checking | unknown
+  lastChecked   DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+  rules         GuardrailRule[]
+  queries       QueryLog[]
+  redactions    RedactionRule[]
+  tableMetadata TableMetadata[]
+  auditLogs     AuditLog[]
 }
 
 model GuardrailRule {
-  id           String      @id @default(cuid())
+  id           String     @id @default(cuid())
   connectionId String
   table        String
   column       String
   rule         String
-  createdAt    DateTime    @default(now())
-  connection   Connection  @relation(fields: [connectionId], references: [id])
+  createdAt    DateTime   @default(now())
+  connection   Connection @relation(fields: [connectionId], references: [id])
 }
 
 model QueryLog {
-  id           String      @id @default(cuid())
+  id           String     @id @default(cuid())
   connectionId String
   query        String
   redacted     Boolean
-  createdAt    DateTime    @default(now())
-  connection   Connection  @relation(fields: [connectionId], references: [id])
+  createdAt    DateTime   @default(now())
+  connection   Connection @relation(fields: [connectionId], references: [id])
 }
 
 model RedactionRule {
-  id            String   @id @default(cuid())
-  connectionId  String
-  tableName     String
-  columnName    String
-  ruleType      String   // e.g., "mask", "hash", "remove", "replace"
-  replacement   String?  // e.g., "***REDACTED***" or null
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  connectionId String
+  tableName    String
+  columnName   String
+  ruleType     String // e.g., "mask", "hash", "remove", "replace"
+  replacement  String? // e.g., "***REDACTED***" or null
+  createdAt    DateTime @default(now())
+  redactionsApplied Boolean @default(false)
 
-  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
 
 model TableMetadata {
-  id            String   @id @default(cuid())
-  connectionId  String
-  tableName     String
-  description   String?
-  notes         String?
-  tags          String[] @default([])
+  id           String   @id @default(cuid())
+  connectionId String
+  tableName    String
+  description  String?
+  notes        String?
+  tags         String[] @default([])
 
-  columns       ColumnMetadata[]
-  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  columns    ColumnMetadata[]
+  connection Connection       @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([connectionId, tableName])
 }
 
 model ColumnMetadata {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   tableMetadataId String
   columnName      String
   description     String?
   example         String?
   importance      Int?
 
-  tableMetadata   TableMetadata @relation(fields: [tableMetadataId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tableMetadata TableMetadata @relation(fields: [tableMetadataId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@unique([tableMetadataId, columnName])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  connectionId String?
+  action       String // e.g., "QUERY", "REDACTION", "LOGIN", etc.
+  details      String?
+  tableName    String?
+  columnName   String?
+  query        String?
+  redacted     Boolean? // true if a redaction occurred
+  performedBy  String? // user or system actor
+  metadata     Json? // additional contextual info such as IP or timing
+  createdAt    DateTime @default(now())
+
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
