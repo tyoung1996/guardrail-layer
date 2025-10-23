@@ -6,6 +6,9 @@ import { Client as PgClient } from "pg";
 import mysql from "mysql2/promise";
 import type { PrismaClient } from "@prisma/client";
 
+// ================== Types for Schema ==================
+type RealSchema = Record<string, { columns: Array<{ name: string; type: string }> }>;
+
 export async function chatRoutes(app: FastifyInstance, prisma: PrismaClient, openai: OpenAI | null) {
 
 const schemaCache = new Map<string, { schema: any; timestamp: number }>();

@@ -31,7 +31,7 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
     try {
-      req.log.info("Creating new connection with data: ", parsed.data);
+      req.log.info({ msg: "Creating new connection with data", data: parsed.data });
       const created = await prisma.connection.create({ data: parsed.data });
       req.log.info(`Connection created with id: ${created.id}`);
 
