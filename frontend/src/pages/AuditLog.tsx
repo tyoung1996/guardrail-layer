@@ -23,7 +23,9 @@ export default function AuditLog() {
     }
   };
 
-
+  useEffect(() => {
+    fetchLogs();
+  }, []);
 
   const toggleDetails = (id: string) => {
     setExpandedDetails((prev) => ({
@@ -104,13 +106,33 @@ export default function AuditLog() {
     <div className="bg-gray-950 text-gray-100 max-w-6xl mx-auto p-8 min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
         <h1 className="text-3xl font-semibold border-b border-gray-800 pb-3 mb-0 md:mb-0">Audit Logs</h1>
-        <button
-          onClick={exportCSV}
-          disabled={loading || filteredLogs.length === 0}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-5 py-2 rounded-xl transition shadow font-medium text-sm"
-        >
-          Export CSV
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={fetchLogs}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-5 py-2 rounded-xl transition shadow font-medium text-sm flex items-center"
+            type="button"
+          >
+            {loading ? (
+              <span>
+                <svg className="animate-spin inline-block w-4 h-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                Refreshing...
+              </span>
+            ) : (
+              "Refresh"
+            )}
+          </button>
+          <button
+            onClick={exportCSV}
+            disabled={loading || filteredLogs.length === 0}
+            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-5 py-2 rounded-xl transition shadow font-medium text-sm"
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
 
       <div className="mb-8">
