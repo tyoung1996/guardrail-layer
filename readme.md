@@ -1,5 +1,6 @@
 # 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System  
 *Your database’s new best friend 🧠🔐*  
+📢 Stay Updated: [@guardraillayer](https://x.com/GuardrailLayer)
 
 ## 🧭 Table of Contents
 
