@@ -2,17 +2,17 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { auditRoutes } from './routes/audit';
-import { connectionRoutes } from './routes/connections';
-import { redactionRoutes } from './routes/redactions';
-import { metadataRoutes } from './routes/metadata';
-import { queryRoutes } from './routes/query';
-import { chatRoutes } from './routes/chat';
-
+import { auditRoutes } from './routes/audit.js';
+import { connectionRoutes } from './routes/connections.js';
+import { redactionRoutes } from './routes/redactions.js';
+import { metadataRoutes } from './routes/metadata.js';
+import { queryRoutes } from './routes/query.js';
+import { chatRoutes } from './routes/chat.js';
 import OpenAI from 'openai';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-import { prisma } from './prisma/client';
 
 const PORT = Number(process.env.PORT || 8080);
 
