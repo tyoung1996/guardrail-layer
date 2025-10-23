@@ -26,7 +26,7 @@ services:
       guardrail-demo-db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma generate && npx prisma migrate deploy && node dist/index.js"
+      sh -c "npx prisma generate && npx prisma migrate deploy && node dist/server.js"
 
   guardrail-db:
     image: postgres:15

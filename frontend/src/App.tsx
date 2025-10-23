@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Connections from "./pages/Connections";
 import Redactions from "./pages/Redactions";
 import ChatPage from "./pages/Chat";
+import AuditLog from "./pages/AuditLog";
 import Layout from "./components/Layout";
 
 
@@ -14,6 +15,7 @@ function App() {
           <Route path="/" element={<Connections />} />
           <Route path="/redactions/:connectionId" element={<Redactions />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/audit" element={<AuditLog />} />
         </Route>
       </Routes>
     </BrowserRouter>
