@@ -47,4 +47,4 @@ ENV DEMO_DATABASE_URL=mysql://root:password@guardrail-db:3306/guardrail_demo
 EXPOSE 8080
 
 # Run migrations and generate client automatically before start
-CMD sh -c "npx prisma generate && npx prisma migrate deploy && node dist/index.js"
+CMD sh -c "npx prisma generate && npx prisma migrate deploy && node dist/server.js"
