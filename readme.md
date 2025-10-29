@@ -1,5 +1,6 @@
 # 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System  
 *Your database’s new best friend 🧠🔐*  
+📢 Stay Updated: [@guardraillayer](https://x.com/GuardrailLayer)
 
 ## 🧭 Table of Contents
 
@@ -46,7 +47,8 @@ https://github.com/user-attachments/assets/3be95196-4986-4de3-a8d6-24b756f2600c
 - ⚙️ **Connection Validation** — test Postgres/MySQL access through a clean UI  
 - 🐳 **Self‑Hosted** — run anywhere via Docker Compose  
 - 🧱 **Extensible** — built with Node.js, Prisma, TypeScript, and Postgres  
-- 🧪 **One‑Click Demo Database** — instantly explore Guardrail Layer with realistic sample data
+- 🧪 **One‑Click Demo Database** — instantly explore Guardrail Layer with realistic sample data  
+- 📜 **Audit Logging** — automatically tracks all queries, redactions, and connection events for transparency and debugging
 
 ---
 
@@ -93,6 +95,8 @@ If you just want to explore without connecting your own DB, enable demo mode in 
 VITE_ALLOW_DEMO_DB=true
 ```
 Then restart Docker. You’ll see a **“Connect Demo Database”** button in the UI — click it to spin up a ready‑to‑use PostgreSQL database (`guardrail_demo`) with realistic data like customers, orders, and employees.
+
+Every action you take (connections, queries, redactions) is automatically logged in the **Audit Log** tab for visibility.
 
 ### 3️⃣ Connect Your Database  
 Go to the **Connections** tab and enter credentials for your PostgreSQL or MySQL instance.  
