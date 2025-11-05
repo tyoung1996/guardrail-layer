@@ -49,7 +49,11 @@ Think of it as an **AI-ready privacy firewall** for your database.
 
 ## 📸 Screenshots / Demo
 
-![Guardrail Layer Demo](https://github.com/user-attachments/assets/3be95196-4986-4de3-a8d6-24b756f2600c)
+
+
+https://github.com/user-attachments/assets/e7176a61-b538-4142-b216-6dd18a12990f
+
+
 
 *(More demos, GIFs, and walkthroughs coming soon!)*  
 
