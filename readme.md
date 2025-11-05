@@ -115,7 +115,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Once running, open the app at **http://localhost:5173**
+Once running, open the app at **http://localhost:8081**
 
 ---
 
