@@ -15,19 +15,20 @@ model User {
 }
 
 model Connection {
-  id            String          @id @default(cuid())
-  userId        String? // optional; no relation enforced
-  name          String
-  dbType        String
-  connectionUrl String
-  status        String          @default("unknown") // active | down | checking | unknown
-  lastChecked   DateTime        @default(now())
-  createdAt     DateTime        @default(now())
-  rules         GuardrailRule[]
-  queries       QueryLog[]
-  redactions    RedactionRule[]
-  tableMetadata TableMetadata[]
-  auditLogs     AuditLog[]
+  id             String              @id @default(cuid())
+  userId         String? // optional; no relation enforced
+  name           String
+  dbType         String
+  connectionUrl  String
+  status         String              @default("unknown") // active | down | checking | unknown
+  lastChecked    DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  rules          GuardrailRule[]
+  queries        QueryLog[]
+  redactions     RedactionRule[]
+  tableMetadata  TableMetadata[]
+  auditLogs      AuditLog[]
+  globalPatterns GlobalPatternRule[]
 }
 
 model GuardrailRule {
@@ -50,14 +51,16 @@ model QueryLog {
 }
 
 model RedactionRule {
-  id           String   @id @default(cuid())
-  connectionId String
-  tableName    String
-  columnName   String
-  ruleType     String // e.g., "mask", "hash", "remove", "replace"
-  replacement  String? // e.g., "***REDACTED***" or null
-  createdAt    DateTime @default(now())
-  redactionsApplied Boolean @default(false)
+  id                String   @id @default(cuid())
+  connectionId      String
+  tableName         String
+  columnName        String
+  ruleType          String // e.g., "mask", "hash", "remove", "replace"
+  replacement       String? // e.g., "***REDACTED***" or null
+  pattern           String? // optional regex pattern for matching redaction
+  role              String? // optional user role restriction for conditional redaction
+  redactionsApplied Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
@@ -105,6 +108,20 @@ model AuditLog {
   performedBy  String? // user or system actor
   metadata     Json? // additional contextual info such as IP or timing
   createdAt    DateTime @default(now())
+
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+model GlobalPatternRule {
+  id           String   @id @default(cuid())
+  connectionId String?
+  name         String
+  pattern      String
+  replacement  String?
+  role         String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }

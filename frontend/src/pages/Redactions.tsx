@@ -12,6 +12,8 @@ interface Rule {
   columnName: string;
   ruleType: "REDACT" | "MASK_EMAIL" | "REMOVE" | "HASH" | "EXPOSE";
   replacementText?: string;
+  pattern?: string;
+  role?: string;
 }
 
 interface Column {
@@ -136,6 +138,133 @@ export default function Redactions() {
     }
   };
 
+  // Helper for updating rule fields (replacementText, role)
+  const updateRule = async (col: Column, updatedFields: Partial<Pick<Rule, "replacementText" | "role">>) => {
+    try {
+      await axios.post(`${API_URL}/redactions/update`, {
+        connectionId,
+        tableName: col.table,
+        columnName: col.name,
+        ...updatedFields,
+      });
+      // Refetch rules
+      const rulesRes = await axios.get(`${API_URL}/redactions/${connectionId}`);
+      setRules(rulesRes.data);
+      setError(null);
+    } catch {
+      setError("Failed to update rule. Please try again.");
+    }
+  };
+
+  // --- Global Regex Rules Modal State ---
+  type GlobalRule = {
+    id?: string;
+    name: string;
+    pattern: string;
+    replacement: string;
+    role?: string;
+  };
+  const [showGlobalModal, setShowGlobalModal] = useState(false);
+  const [globalRules, setGlobalRules] = useState<GlobalRule[]>([]);
+  const [globalModalLoading, setGlobalModalLoading] = useState(false);
+  const [globalModalError, setGlobalModalError] = useState<string | null>(null);
+  const [newGlobalRule, setNewGlobalRule] = useState<GlobalRule>({ name: "", pattern: "", replacement: "", role: "" });
+  // Track deleted global rule IDs for backend deletion
+  const [deletedGlobalRuleIds, setDeletedGlobalRuleIds] = useState<string[]>([]);
+  // --- Regex Builder Modal State ---
+  const [regexTestInput, setRegexTestInput] = useState("");
+  const [regexTestOutput, setRegexTestOutput] = useState("");
+  const [showRegexBuilder, setShowRegexBuilder] = useState(false);
+
+  const fetchGlobalRules = async () => {
+    setGlobalModalLoading(true);
+    setGlobalModalError(null);
+    try {
+      const res = await axios.get(`${API_URL}/redactions/global`);
+      setGlobalRules(res.data || []);
+    } catch {
+      setGlobalModalError("Failed to load global regex rules.");
+    } finally {
+      setGlobalModalLoading(false);
+    }
+  };
+
+  const handleOpenGlobalModal = () => {
+    console.log("Opening global modal");
+    setShowGlobalModal(true);
+    fetchGlobalRules();
+    setNewGlobalRule({ name: "", pattern: "", replacement: "", role: "" });
+    setGlobalModalError(null);
+  };
+
+  const handleAddGlobalRule = () => {
+    if (
+      !newGlobalRule.name.trim() ||
+      !newGlobalRule.pattern.trim()
+    ) return;
+    setGlobalRules((prev) => [
+      ...prev,
+      { ...newGlobalRule }
+    ]);
+    setNewGlobalRule({ name: "", pattern: "", replacement: "", role: "" });
+  };
+
+  const handleDeleteGlobalRule = (idx: number) => {
+    setGlobalRules((prev) => {
+      const rule = prev[idx];
+      if (rule?.id) {
+        setDeletedGlobalRuleIds((prevIds) => [...prevIds, rule.id!]);
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const handleEditGlobalRule = (idx: number, field: keyof GlobalRule, value: string) => {
+    setGlobalRules((prev) =>
+      prev.map((rule, i) =>
+        i === idx ? { ...rule, [field]: value } : rule
+      )
+    );
+  };
+
+  const handleSaveGlobalRules = async () => {
+    setGlobalModalLoading(true);
+    setGlobalModalError(null);
+    try {
+      // First, delete any deleted rules on the backend
+      for (const id of deletedGlobalRuleIds) {
+        try {
+          await axios.delete(`${API_URL}/redactions/global/${id}`);
+        } catch (err) {
+          console.warn("Failed to delete rule", id, err);
+        }
+      }
+      setDeletedGlobalRuleIds([]);
+
+      // Post one-by-one — backend expects a single rule object per request
+      for (const rule of globalRules) {
+        const payload = {
+          name: rule.name?.trim() ?? "",
+          pattern: rule.pattern?.trim() ?? "",
+          replacement: rule.replacement ?? "",
+          role: rule.role ?? "",
+        };
+        // Skip invalid rows (UI already guards, but double-check here)
+        if (!payload.name || !payload.pattern) continue;
+
+        await axios.post(`${API_URL}/redactions/global`, payload);
+      }
+
+      // Close the modal and refresh the list
+      setShowGlobalModal(false);
+      await fetchGlobalRules();
+    } catch (e) {
+      setGlobalModalError("Failed to save global regex rules.");
+    } finally {
+      setGlobalModalLoading(false);
+    }
+  };
+
   const groupedColumns = columns.reduce((acc, col) => {
     if (!acc[col.table]) acc[col.table] = [];
     acc[col.table].push(col);
@@ -164,8 +293,275 @@ export default function Redactions() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#1a1b1f] via-[#13141a] to-[#0f1014] text-gray-200">
-      <div className="w-full px-12 py-12 mx-auto">
+    <>
+      {/* --- Global Regex Modal UI (moved outside main container) --- */}
+      {showGlobalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-[#1e1f25] rounded-lg shadow-lg w-full max-w-3xl p-8 relative">
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-2xl"
+              onClick={() => {
+                console.log("Closing global modal");
+                setShowGlobalModal(false);
+              }}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="text-2xl font-bold mb-4 text-gray-200">Manage Global Regex Rules</h2>
+            {globalModalError && (
+              <div className="mb-4 text-red-400 font-semibold">{globalModalError}</div>
+            )}
+            {globalModalLoading ? (
+              <div className="text-center text-gray-400 py-8">Loading...</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto mb-4">
+                  <table className="w-full table-auto text-base divide-y divide-gray-700 border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-2 text-left text-gray-300 font-semibold">Name</th>
+                        <th className="px-4 py-2 text-left text-gray-300 font-semibold">
+                          Pattern
+                  
+                        </th>
+                        <th className="px-4 py-2 text-left text-gray-300 font-semibold">Replacement</th>
+                        <th className="px-4 py-2 text-left text-gray-300 font-semibold">Role</th>
+                        <th className="px-2 py-2"></th>
+                      </tr>
+                    </thead>
+      {/* --- Regex Smart Builder Modal --- */}
+      {showRegexBuilder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-[#1e1f25] rounded-lg shadow-lg w-full max-w-lg p-8 relative">
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-2xl"
+              onClick={() => setShowRegexBuilder(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="text-2xl font-bold mb-4 text-gray-200">Regex Smart Builder</h2>
+            <div className="mb-4">
+              <div className="flex flex-wrap gap-2 mb-2">
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1 rounded text-sm"
+                  onClick={() => setNewGlobalRule(r => ({ ...r, pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}" }))}
+                  type="button"
+                >Email</button>
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1 rounded text-sm"
+                  onClick={() => setNewGlobalRule(r => ({ ...r, pattern: "\\b\\d{3}[-.]?\\d{2}[-.]?\\d{4}\\b" }))}
+                  type="button"
+                >SSN</button>
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1 rounded text-sm"
+                  onClick={() => setNewGlobalRule(r => ({ ...r, pattern: "\\b(?:\\d[ -]*?){13,16}\\b" }))}
+                  type="button"
+                >Credit Card</button>
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1 rounded text-sm"
+                  onClick={() => setNewGlobalRule(r => ({ ...r, pattern: "\\b\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b" }))}
+                  type="button"
+                >Phone</button>
+              </div>
+              <div className="mb-2">
+                <label className="block text-gray-300 font-semibold mb-1" htmlFor="regex-pattern-builder">
+                  Pattern
+                </label>
+                <input
+                  id="regex-pattern-builder"
+                  type="text"
+                  className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full mb-2"
+                  value={newGlobalRule.pattern}
+                  onChange={e => setNewGlobalRule(r => ({ ...r, pattern: e.target.value }))}
+                  placeholder="Regex pattern"
+                />
+              </div>
+              <div className="mb-2">
+                <label className="block text-gray-300 font-semibold mb-1" htmlFor="regex-test-input">
+                  Test Input
+                </label>
+                <textarea
+                  id="regex-test-input"
+                  className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full mb-2"
+                  rows={3}
+                  value={regexTestInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRegexTestInput(val);
+                    try {
+                      const regex = new RegExp(newGlobalRule.pattern, "gi");
+                      const highlighted = val.replace(regex, match => `[[${match}]]`);
+                      setRegexTestOutput(highlighted);
+                    } catch {
+                      setRegexTestOutput("⚠️ Invalid regex syntax");
+                    }
+                  }}
+                  placeholder="Paste sample text to test your regex"
+                />
+              </div>
+              <div className="mb-2">
+                <label className="block text-gray-300 font-semibold mb-1">
+                  Preview
+                </label>
+                <div className="bg-[#25262c] text-gray-100 px-3 py-2 rounded min-h-[48px] whitespace-pre-line font-mono text-sm overflow-x-auto border border-gray-700">
+                  {(() => {
+                    // Highlight [[...]] with span
+                    if (regexTestOutput.startsWith("⚠️")) {
+                      return <span className="text-yellow-400">{regexTestOutput}</span>;
+                    }
+                    // Replace [[match]] with highlighted span
+                    const parts = regexTestOutput.split(/\[\[|\]\]/);
+                    let highlight = false;
+                    return parts.map((part, idx) => {
+                      if (idx === 0 && regexTestOutput.startsWith('[[')) highlight = true;
+                      if (idx === 0) return part;
+                      highlight = !highlight;
+                      if (highlight) {
+                        return <span key={idx} className="bg-yellow-700/60 text-yellow-200 rounded px-1">{part}</span>;
+                      } else {
+                        return part;
+                      }
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button
+                className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-6 py-2 rounded-md shadow"
+                onClick={() => setShowRegexBuilder(false)}
+              >Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+                    <tbody>
+                      {globalRules.map((rule, idx) => (
+                        <tr key={idx} className="hover:bg-gray-800/60 transition-all">
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                              value={rule.name}
+                              onChange={e => handleEditGlobalRule(idx, "name", e.target.value)}
+                              placeholder="Rule name"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                              value={rule.pattern}
+                              onChange={e => handleEditGlobalRule(idx, "pattern", e.target.value)}
+                              placeholder="Regex pattern"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                              value={rule.replacement}
+                              onChange={e => handleEditGlobalRule(idx, "replacement", e.target.value)}
+                              placeholder="Replacement"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                          <select
+                            className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                            value={rule.role || ""}
+                            onChange={e => handleEditGlobalRule(idx, "role", e.target.value)}
+                            disabled={true}
+                          >
+                            <option value="">(none)</option>
+                            <option value="admin">admin</option>
+                            <option value="viewer">viewer</option>
+                          </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <button
+                              className="text-red-400 hover:text-red-600 text-lg px-2"
+                              onClick={() => handleDeleteGlobalRule(idx)}
+                              aria-label="Delete"
+                            >×</button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                            value={newGlobalRule.name}
+                            onChange={e => setNewGlobalRule(r => ({ ...r, name: e.target.value }))}
+                            placeholder="Rule name"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                            value={newGlobalRule.pattern}
+                            onChange={e => setNewGlobalRule(r => ({ ...r, pattern: e.target.value }))}
+                            placeholder="Regex pattern"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                            value={newGlobalRule.replacement}
+                            onChange={e => setNewGlobalRule(r => ({ ...r, replacement: e.target.value }))}
+                            placeholder="Replacement"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full"
+                            value={newGlobalRule.role || ""}
+                            onChange={e => setNewGlobalRule(r => ({ ...r, role: e.target.value }))}
+                            disabled={true}
+                          >
+                            <option value="">(none)</option>
+                            <option value="admin">admin</option>
+                            <option value="viewer">viewer</option>
+                          </select>
+                        </td>
+                        <td className="px-2 py-2">
+                          <button
+                            className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1 rounded-md text-sm font-semibold shadow"
+                            onClick={handleAddGlobalRule}
+                            disabled={!newGlobalRule.name.trim() || !newGlobalRule.pattern.trim()}
+                          >Add</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-end gap-4">
+                  <button
+                    className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-6 py-2 rounded-md shadow"
+                    onClick={() => {
+                      console.log("Closing global modal");
+                      setShowGlobalModal(false);
+                    }}
+                    disabled={globalModalLoading}
+                  >Cancel</button>
+                  <button
+                    className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-md shadow font-semibold"
+                    onClick={handleSaveGlobalRules}
+                    disabled={globalModalLoading}
+                  >Save</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="min-h-screen w-full bg-gradient-to-br from-[#1a1b1f] via-[#13141a] to-[#0f1014] text-gray-200">
+        <div className="w-full px-12 py-12 mx-auto">
         <h1 className="text-4xl font-extrabold mb-8 text-gray-300 text-center tracking-wide">Redaction Rules</h1>
 
         {error && (
@@ -174,13 +570,20 @@ export default function Redactions() {
           </div>
         )}
 
+
         {loading ? (
           <p className="text-center text-gray-300">Loading rules and schema...</p>
         ) : columns.length === 0 ? (
           <p className="text-center text-gray-300">No columns found for this connection.</p>
         ) : (
           <>
-            <div className="flex justify-end mb-6">
+            <div className="flex flex-wrap justify-between items-center mb-6 gap-2">
+              <button
+                onClick={handleOpenGlobalModal}
+                className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-md shadow font-semibold"
+              >
+                Manage Global Regex Rules
+              </button>
               <button
                 onClick={() => setShowRemovedTables(!showRemovedTables)}
                 className="bg-[#25262c] hover:bg-[#1e1f25] text-gray-200 px-4 py-2 rounded-md shadow transition"
@@ -209,6 +612,12 @@ export default function Redactions() {
                       className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[20%]"
                     >
                       Replacement Text
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-10 py-3 text-left text-gray-300 font-semibold tracking-wide w-[15%]"
+                    >
+                      Role
                     </th>
                     <th
                       scope="col"
@@ -482,7 +891,40 @@ export default function Redactions() {
                                 {rule?.ruleType || "EXPOSE"}
                               </td>
                               <td className="px-10 py-4 w-[20%] text-gray-300 italic truncate">
-                                {rule?.replacementText || "-"}
+                                <input
+                                  type="text"
+                                  className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                  value={rule?.replacementText ?? ""}
+                                  onChange={(e) => {
+                                    // Local edit, but we save on blur
+                                    setRules((prev) =>
+                                      prev.map((r) =>
+                                        r.columnName === col.name
+                                          ? { ...r, replacementText: e.target.value }
+                                          : r
+                                      )
+                                    );
+                                  }}
+                                  onBlur={async (e) => {
+                                    await updateRule(col, { replacementText: e.target.value });
+                                  }}
+                                  placeholder="Replacement text"
+                                  disabled={!rule}
+                                />
+                              </td>
+                              <td className="px-10 py-4 w-[15%] text-gray-300 truncate">
+                                <select
+                                  className="bg-[#25262c] text-gray-200 px-2 py-1 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                  value={rule?.role ?? ""}
+                                  onChange={async (e) => {
+                                    await updateRule(col, { role: e.target.value });
+                                  }}
+                                  disabled={true}
+                                >
+                                  <option value="">(none)</option>
+                                  <option value="admin">admin</option>
+                                  <option value="viewer">viewer</option>
+                                </select>
                               </td>
                               <td className="px-10 py-4 w-[15%]">
                                 <select
@@ -513,6 +955,7 @@ export default function Redactions() {
           </>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
