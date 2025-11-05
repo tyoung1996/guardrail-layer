@@ -134,6 +134,15 @@ app.post('/chat', async (req, reply) => {
   
       // Get redaction rules
       const redactions = await prisma.redactionRule.findMany({ where: { connectionId } });
+      // Get global regex-based redaction patterns (both for this connection and global)
+      const globalPatterns = await prisma.globalPatternRule.findMany({
+        where: {
+          OR: [
+            { connectionId },
+            { connectionId: null }
+          ]
+        }
+      });
       const redactedColumns = new Map<string, Set<string>>();
       for (const r of redactions) {
         if (!redactedColumns.has(r.tableName)) redactedColumns.set(r.tableName, new Set());
@@ -404,6 +413,18 @@ app.post('/chat', async (req, reply) => {
                 }
               }
             }
+            // Apply global regex-based redactions
+            for (const [key, value] of Object.entries(out)) {
+              if (typeof value === 'string') {
+                for (const rule of globalPatterns) {
+                  const regex = new RegExp(rule.pattern, 'gi');
+                  if (regex.test(value)) {
+                    out[key] = rule.replacement || '■■■';
+                    break;
+                  }
+                }
+              }
+            }
             return out;
           });
   
@@ -426,21 +447,21 @@ app.post('/chat', async (req, reply) => {
           let summary = "Query executed successfully.";
           try {
             const summaryPrompt = `User asked: "${question}"
-  
-  SQL executed: ${sql}
-  
-  Number of results: ${rows.length}
-  
-  Sample data (first 3 rows):
-  ${JSON.stringify(redactedRows.slice(0, 3), null, 2)}
-  
-  Provide a clear, natural-language answer to the user's question based on this data. 
-  - Be specific with numbers and names when available
-  - If the question asks "who", mention the person's name if it's in the results
-  - If the question asks "what organization", mention the organization name
-  - If the question asks about trends or patterns, describe what you see
-  - Keep it concise but informative`;
-  
+
+SQL executed: ${sql}
+
+Number of results: ${redactedRows.length}
+
+Sample data (first 3 rows):
+${JSON.stringify(redactedRows.slice(0, 3), null, 2)}
+
+Provide a clear, natural-language answer to the user's question based on this data. 
+- Be specific with numbers and names when available
+- If the question asks "who", mention the person's name if it's in the results
+- If the question asks "what organization", mention the organization name
+- If the question asks about trends or patterns, describe what you see
+- Keep it concise but informative`;
+
             const summaryCompletion = await openai.chat.completions.create({
               model: "gpt-4o-mini",
               messages: [
@@ -473,12 +494,19 @@ app.post('/chat', async (req, reply) => {
           });
 
           // Build per-query rule summary
-          const ruleSummary = {
+          const ruleSummary: Record<string, number> = {
             REDACT: appliedRedactions.filter(r => r.ruleType === "REDACT").length,
             MASK_EMAIL: appliedRedactions.filter(r => r.ruleType === "MASK_EMAIL").length,
             HASH: appliedRedactions.filter(r => r.ruleType === "HASH").length,
             REMOVE: appliedRedactions.filter(r => r.ruleType === "REMOVE").length,
           };
+          
+          // Count global regex hits in redactedRows
+          const globalRegexHits = globalPatterns.filter(r =>
+            new RegExp(r.pattern, "gi").test(JSON.stringify(redactedRows))
+          ).length;
+          ruleSummary["GLOBAL_REGEX"] = globalRegexHits;
+          ruleSummary.GLOBAL_REGEX = globalRegexHits;
 
           // Filter removedFromSchema to only include affected columns
           const actuallyRemoved = removedFromSchema.filter(col =>

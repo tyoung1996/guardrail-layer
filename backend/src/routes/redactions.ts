@@ -14,6 +14,16 @@ import type { PrismaClient } from "@prisma/client";
  */
 export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient) {
 
+  async function logAudit(prisma: PrismaClient, action: string, details: string, connectionId?: string | null) {
+    try {
+      await prisma.auditLog.create({
+        data: { action, details, connectionId: connectionId ?? null },
+      });
+    } catch (err) {
+      console.error("Failed to log audit:", err);
+    }
+  }
+
   /** List redaction rules for a specific connection */
   app.get<{ Params: { connectionId: string } }>("/redactions/:connectionId", async (req, reply) => {
     const { connectionId } = req.params;
@@ -22,6 +32,7 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       return reply.send(rules);
     } catch (e: any) {
       req.log.error(e);
+      await logAudit(prisma, "redaction_error", `Error listing redactions: ${e.message}`, connectionId);
       return reply.code(500).send({ error: e.message });
     }
   });
@@ -34,11 +45,32 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       columnName: z.string(),
       ruleType: z.enum(["REDACT", "MASK_EMAIL", "REMOVE", "HASH", "EXPOSE"]),
       replacement: z.string().optional(),
+      pattern: z.string().optional(),
+      role: z.string().optional(),
     });
     const parsed = Body.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!parsed.success) {
+      await logAudit(prisma, "redaction_error", `Invalid request body: ${JSON.stringify(parsed.error.flatten())}`);
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    }
 
     const data = parsed.data;
+
+    if (data.pattern) {
+      try {
+        new RegExp(data.pattern);
+      } catch {
+        await logAudit(prisma, "redaction_error", `Invalid regex pattern: ${data.pattern}`, data.connectionId);
+        return reply.code(400).send({ error: "Invalid regex pattern" });
+      }
+    }
+
+    const allowedRoles = ["admin", "analyst", "viewer"];
+    if (data.role && !allowedRoles.includes(data.role.toLowerCase())) {
+      await logAudit(prisma, "redaction_error", `Invalid role specified: ${data.role}`, data.connectionId);
+      return reply.code(400).send({ error: "Invalid role specified" });
+    }
+
     try {
       // Remove rule if EXPOSE
       if (data.ruleType === "EXPOSE") {
@@ -49,29 +81,18 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
             columnName: { equals: data.columnName, mode: "insensitive" },
           },
         });
-        await prisma.auditLog.create({
-          data: {
-            action: "redaction_deleted",
-            details: JSON.stringify(data),
-            connectionId: data.connectionId,
-          },
-        });
+        await logAudit(prisma, "redaction_deleted", `Rule: ${data.ruleType}, Table: ${data.tableName}, Column: ${data.columnName}, Pattern: ${data.pattern ?? "N/A"}, Role: ${data.role ?? "any"}`, data.connectionId);
         return reply.send({ ok: true, removed: result.count });
       }
 
       // Create rule
       const rule = await prisma.redactionRule.create({ data });
-      await prisma.auditLog.create({
-        data: {
-          action: "redaction_created",
-          details: JSON.stringify(data),
-          connectionId: data.connectionId,
-        },
-      });
+      await logAudit(prisma, "redaction_created", `Rule: ${data.ruleType}, Table: ${data.tableName}, Column: ${data.columnName}, Pattern: ${data.pattern ?? "N/A"}, Role: ${data.role ?? "any"}`, data.connectionId);
 
       return reply.send(rule);
     } catch (e: any) {
       req.log.error(e);
+      await logAudit(prisma, "redaction_error", `Exception: ${e.message}`, data.connectionId);
       return reply.code(500).send({ error: e.message });
     }
   });
@@ -80,13 +101,13 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   app.delete<{ Params: { id: string } }>("/redactions/:id", async (req, reply) => {
     const { id } = req.params;
     try {
+      const rule = await prisma.redactionRule.findUnique({ where: { id } });
       await prisma.redactionRule.delete({ where: { id } });
-      await prisma.auditLog.create({
-        data: { action: "redaction_deleted", details: id },
-      });
+      await logAudit(prisma, "redaction_deleted", `Rule ID: ${id}, Table: ${rule?.tableName ?? "N/A"}, Column: ${rule?.columnName ?? "N/A"}, RuleType: ${rule?.ruleType ?? "N/A"}, Pattern: ${rule?.pattern ?? "N/A"}, Role: ${rule?.role ?? "any"}`, rule?.connectionId);
       return reply.send({ ok: true });
     } catch (e: any) {
       req.log.error(e);
+      await logAudit(prisma, "redaction_error", `Exception deleting rule ID ${id}: ${e.message}`);
       return reply.code(500).send({ error: e.message });
     }
   });
@@ -98,13 +119,7 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       const result = connectionId
         ? await prisma.redactionRule.deleteMany({ where: { connectionId } })
         : await prisma.redactionRule.deleteMany({});
-      await prisma.auditLog.create({
-        data: {
-          action: "redactions_cleared",
-          details: connectionId ?? "global",
-          connectionId: connectionId ?? null,
-        },
-      });
+      await logAudit(prisma, "redactions_cleared", `Scope: ${connectionId ?? "global"}`, connectionId ?? null);
       return reply.send({
         ok: true,
         deleted: result.count,
@@ -112,6 +127,7 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       });
     } catch (e: any) {
       req.log.error(e);
+      await logAudit(prisma, "redaction_error", `Exception clearing redactions: ${e.message}`, connectionId ?? null);
       return reply.code(500).send({ error: e.message });
     }
   });
@@ -124,7 +140,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       ruleType: z.enum(["REDACT", "MASK_EMAIL", "REMOVE", "HASH"]),
     });
     const parsed = Body.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!parsed.success) {
+      await logAudit(prisma, "redaction_error", `Invalid request body for table apply: ${JSON.stringify(parsed.error.flatten())}`);
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    }
 
     const { connectionId, tableName, ruleType } = parsed.data;
 
@@ -157,13 +176,7 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       const data = columns.map((c) => ({ connectionId, tableName, columnName: c, ruleType }));
       await prisma.redactionRule.createMany({ data });
 
-      await prisma.auditLog.create({
-        data: {
-          action: "redaction_table_applied",
-          details: JSON.stringify({ tableName, ruleType }),
-          connectionId,
-        },
-      });
+      await logAudit(prisma, "redaction_table_applied", `Applied rule: ${ruleType} to table: ${tableName}`, connectionId);
 
       return reply.send({
         ok: true,
@@ -172,7 +185,70 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
       });
     } catch (e: any) {
       req.log.error(e);
+      await logAudit(prisma, "redaction_error", `Exception applying table rule: ${e.message}`, connectionId);
       return reply.code(500).send({ error: e.message });
     }
+  });
+
+  /** Manage global regex-based redaction patterns */
+  app.register(async (global) => {
+    /** List all global regex rules */
+    global.get("/redactions/global", async (_req, reply) => {
+      try {
+        const rules = await prisma.globalPatternRule.findMany({ orderBy: { createdAt: "desc" } });
+        return reply.send(rules);
+      } catch (e: any) {
+        await logAudit(prisma, "redaction_error", `Error listing global patterns: ${e.message}`);
+        return reply.code(500).send({ error: e.message });
+      }
+    });
+
+    /** Create or update a global regex rule */
+    global.post("/redactions/global", async (req, reply) => {
+      const Body = z.object({
+        connectionId: z.string().optional(),
+        name: z.string(),
+        pattern: z.string(),
+        replacement: z.string().optional(),
+        role: z.string().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = Body.safeParse(req.body);
+      if (!parsed.success) {
+        await logAudit(prisma, "redaction_error", `Invalid global pattern request body: ${JSON.stringify(parsed.error.flatten())}`);
+        return reply.code(400).send({ error: parsed.error.flatten() });
+      }
+
+      const data = parsed.data;
+      try {
+        new RegExp(data.pattern);
+      } catch {
+        await logAudit(prisma, "redaction_error", `Invalid global regex pattern: ${data.pattern}`, data.connectionId ?? null);
+        return reply.code(400).send({ error: "Invalid regex pattern" });
+      }
+
+      try {
+        const rule = await prisma.globalPatternRule.create({ data });
+        await logAudit(prisma, "global_redaction_created", `Pattern: ${data.pattern}, Role: ${data.role ?? "any"}, Replacement: ${data.replacement ?? "***REDACTED***"}`, data.connectionId ?? null);
+        return reply.send(rule);
+      } catch (e: any) {
+        await logAudit(prisma, "redaction_error", `Exception creating global pattern: ${e.message}`, data.connectionId ?? null);
+        return reply.code(500).send({ error: e.message });
+      }
+    });
+
+    /** Delete a global regex rule */
+    global.delete<{ Params: { id: string } }>("/redactions/global/:id", async (req, reply) => {
+      const { id } = req.params;
+      try {
+        const rule = await prisma.globalPatternRule.findUnique({ where: { id } });
+        await prisma.globalPatternRule.delete({ where: { id } });
+        await logAudit(prisma, "global_redaction_deleted", `Pattern: ${rule?.pattern ?? "N/A"}, Role: ${rule?.role ?? "any"}, Replacement: ${rule?.replacement ?? "***REDACTED***"}`, rule?.connectionId ?? null);
+        return reply.send({ ok: true });
+      } catch (e: any) {
+        await logAudit(prisma, "redaction_error", `Exception deleting global pattern ID ${id}: ${e.message}`);
+        return reply.code(500).send({ error: e.message });
+      }
+    });
   });
 }
