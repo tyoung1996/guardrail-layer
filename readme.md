@@ -1,4 +1,5 @@
-![Guardrail Layer Banner](https://github.com/user-attachments/assets/banner-guardrail-layer.png)
+
+<img width="1184" height="864" alt="banner" src="https://github.com/user-attachments/assets/bc8d1f8f-3e81-4051-bbdd-29cdb3cf44bb" />
 
 # 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System  
 *Your database’s new best friend 🧠🔐*  
