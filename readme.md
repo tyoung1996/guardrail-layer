@@ -121,6 +121,19 @@ Copy-Item .\backend\.env.example .\backend\.env -Force
 # Copy frontend .env
 Copy-Item .\frontend\.env.example .\frontend\.env -Force
 ```
+### ⚙️ Configure Environment Variables
+
+After copying the .env files, open them in your editor (for example, backend/.env) and update the values as needed.
+
+```
+# OpenAI API Key (required for AI-powered features)
+OPENAI_API_KEY=sk-your-openai-key-here
+
+# Database connections (default work with Docker)
+GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrails
+DEMO_DATABASE_URL=postgresql://demo:demo@guardrail-demo-db:5432/guardrail_demo
+
+```
 
 ### 3️⃣ Launch with Docker  
 ```bash
