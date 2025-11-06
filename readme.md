@@ -98,9 +98,29 @@ https://github.com/user-attachments/assets/e7176a61-b538-4142-b216-6dd18a12990f
 ---
 
 ## 🚀 Quickstart
+### 💻 Windows Users Note
 
+If you see this error while cloning:
+```
+error: invalid path 'frontend/nginx.conf '
+fatal: unable to checkout working tree
+This happens because Windows does not allow filenames with trailing spaces.
+macOS and Linux users will not encounter this issue.
+```
+Fix options:
+
+🧩 Option 1: Use WSL (Windows Subsystem for Linux) to clone:
+
+```wsl
+git clone https://github.com/tyoung1996/guardrail-layer.git
+⚙️ Option 2: Clone normally, then run:
+```
+
+```git config core.protectNTFS false
+git restore --source=HEAD :/
+```
 ### 1️⃣ Clone & Setup  
-```bash
+```
 git clone https://github.com/tyoung1996/guardrail-layer.git
 cd guardrail-layer
 ```
