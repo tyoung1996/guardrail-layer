@@ -7,6 +7,7 @@ export default function AuditLog() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -14,6 +15,7 @@ export default function AuditLog() {
       // No server-side filtering, fetch all and filter client-side
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/audit`);
       setLogs(res.data || []);
+      setLastUpdated(new Date());
       setError(null);
     } catch (e: any) {
       console.error(e);
@@ -104,6 +106,12 @@ export default function AuditLog() {
 
   return (
     <div className="bg-gray-950 text-gray-100 max-w-6xl mx-auto p-8 min-h-screen">
+      {/* Demo banner */}
+      {import.meta.env.VITE_DEMO_MODE === "true" && (
+        <div className="bg-yellow-800/20 border border-yellow-700 text-yellow-300 text-xs rounded-xl p-3 mb-6 text-center">
+          🧱 Demo Mode Active — Audit logs here are simulated.
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
         <h1 className="text-3xl font-semibold border-b border-gray-800 pb-3 mb-0 md:mb-0">Audit Logs</h1>
         <div className="flex gap-3">
@@ -127,10 +135,11 @@ export default function AuditLog() {
           </button>
           <button
             onClick={exportCSV}
-            disabled={loading || filteredLogs.length === 0}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-5 py-2 rounded-xl transition shadow font-medium text-sm"
+            disabled={loading || filteredLogs.length === 0 || import.meta.env.VITE_DEMO_MODE === "true"}
+            title={import.meta.env.VITE_DEMO_MODE === "true" ? "Export disabled in demo mode" : ""}
+            className={`${import.meta.env.VITE_DEMO_MODE === "true" ? "bg-green-600/50 text-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"} disabled:bg-gray-600 text-white px-5 py-2 rounded-xl transition shadow font-medium text-sm`}
           >
-            Export CSV
+            {import.meta.env.VITE_DEMO_MODE === "true" ? "Export CSV (Demo Disabled)" : "Export CSV"}
           </button>
         </div>
       </div>
@@ -143,6 +152,11 @@ export default function AuditLog() {
           onChange={e => setSearch(e.target.value)}
           className="w-full bg-gray-900/80 border border-gray-700 rounded-xl px-4 py-3 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono text-base transition"
         />
+        {lastUpdated && (
+          <p className="text-xs text-gray-500 mt-2 text-right">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
       </div>
 
       {loading && (
@@ -158,8 +172,10 @@ export default function AuditLog() {
 
       <div className="flex flex-col gap-6">
         {filteredLogs.length === 0 && !loading && (
-          <div className="text-center p-6 text-gray-500 border-t border-gray-800">
-            No audit logs found.
+          <div className="flex flex-col items-center justify-center py-20 text-gray-500 border border-gray-800 rounded-xl bg-gray-900/60">
+            <span className="text-4xl mb-2">🪶</span>
+            <p className="text-sm font-medium">No audit logs yet</p>
+            <p className="text-xs text-gray-600">Your activity will appear here as you interact with Guardrail Layer.</p>
           </div>
         )}
         {filteredLogs.map((log: any) => {
@@ -173,17 +189,21 @@ export default function AuditLog() {
           return (
             <div
               key={log.id}
-              className="rounded-xl bg-gray-900/80 border border-gray-800 shadow-lg hover:shadow-xl transition p-0 overflow-hidden"
+              className="rounded-xl bg-gray-900/80 border border-gray-800 shadow-lg hover:shadow-blue-900/30 transition-transform hover:-translate-y-0.5 p-0 overflow-hidden"
             >
               {/* Header row */}
               <div className="flex justify-between items-center px-5 py-4 border-b border-gray-800 bg-gray-950/60">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-base text-blue-300">{log.action}</span>
                   {log.connectionId && (
-                    <span className="ml-3 text-xs text-gray-400 bg-gray-800/70 rounded px-2 py-0.5 font-mono">{log.connectionId}</span>
+                    <span className="ml-3 text-xs text-gray-400 bg-gray-800/70 rounded px-2 py-0.5 font-mono">
+                      {import.meta.env.VITE_DEMO_MODE === "true" ? "demo-connection" : log.connectionId}
+                    </span>
                   )}
                   {log.userId && (
-                    <span className="ml-2 text-xs text-gray-400 bg-gray-800/70 rounded px-2 py-0.5 font-mono">{log.userId}</span>
+                    <span className="ml-2 text-xs text-gray-400 bg-gray-800/70 rounded px-2 py-0.5 font-mono">
+                      {import.meta.env.VITE_DEMO_MODE === "true" ? "demo-user" : log.userId}
+                    </span>
                   )}
                 </div>
                 <span className="text-xs text-gray-400 font-mono">
@@ -309,9 +329,7 @@ export default function AuditLog() {
                     ) : (
                       <>
                         <pre
-                          className={`bg-gray-950/60 text-gray-300 text-xs rounded-xl p-3 overflow-x-auto font-mono transition-all duration-200 ease-in-out ${
-                            isExpanded ? "max-h-[600px]" : "max-h-[7rem] overflow-hidden"
-                          }`}
+                          className="bg-gray-950/70 border border-gray-800 text-gray-300 text-xs rounded-xl p-3 overflow-x-auto font-mono leading-relaxed"
                         >
                           {JSON.stringify(parsedJSON, null, 2)}
                         </pre>

@@ -12,7 +12,8 @@ import {
 } from "@heroicons/react/24/solid";
 
 const API_URL = import.meta.env.VITE_API_URL;
-const SHOW_DEMO = import.meta.env.VITE_ALLOW_DEMO_DB === "true";
+const SHOW_DEMO_DB = import.meta.env.VITE_ALLOW_DEMO_DB === "true";
+const SHOW_DEMO = import.meta.env.VITE_DEMO_MODE === "true";
 
 type ConnStatus = "active" | "down" | "unknown";
 
@@ -43,6 +44,10 @@ export default function Connections() {
   }
 
   async function addConnection() {
+    if (SHOW_DEMO) {
+      window.alert("Demo mode — adding new connections is disabled.");
+      return;
+    }
     if (!newConn.name || !newConn.connectionUrl) {
       window.alert("⚠️ Please fill in all fields before adding a connection.");
       return;
@@ -98,6 +103,10 @@ export default function Connections() {
   }
 
   async function deleteConnection() {
+    if (SHOW_DEMO) {
+      window.alert("Demo mode — deleting connections is disabled.");
+      return;
+    }
     if (!selectedConn) return;
     try {
       await axios.delete(`${API_URL}/connections/${selectedConn.id}`);
@@ -110,7 +119,18 @@ export default function Connections() {
   }
 
   useEffect(() => {
-    fetchConnections();
+    async function init() {
+      await fetchConnections();
+      if (SHOW_DEMO) {
+        const exists = connections.some((c) => c.name === "Demo Database");
+        const demoAdded = sessionStorage.getItem("demoAdded") === "true";
+        if (!exists && !demoAdded) {
+          await addDemoConnection();
+          sessionStorage.setItem("demoAdded", "true");
+        }
+      }
+    }
+    init();
     const interval = setInterval(fetchConnections, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -153,6 +173,12 @@ export default function Connections() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f1115] via-[#141820] to-[#0f1115] text-gray-100 font-sans">
+      {/* Demo Mode Banner */}
+      {SHOW_DEMO && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-center py-3 font-medium">
+          Demo Mode — You’re connected to a sample database. You can test new connections, but changes won’t be saved.
+        </div>
+      )}
       <main className="max-w-5xl mx-auto py-12 px-6 sm:px-10">
         {/* Header */}
         <div className="mb-8">
@@ -163,6 +189,7 @@ export default function Connections() {
         </div>
 
         {/* Form Card */}
+        
         <section className="bg-[#1b1f28] rounded-xl p-6 shadow-lg border border-gray-800 mb-10">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Name */}
@@ -228,14 +255,16 @@ export default function Connections() {
             </button>
 
             <button
-              onClick={addConnection}
-              className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-all shadow-md hover:shadow-emerald-600/30 font-semibold"
-            >
+  onClick={addConnection}
+  className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-all shadow-md hover:shadow-emerald-600/30 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+  disabled={SHOW_DEMO}
+  title={SHOW_DEMO ? "Disabled in demo mode" : ""}
+>
               <PlusCircleIcon className="w-5 h-5" />
               Add Connection
             </button>
 
-            {SHOW_DEMO && (
+            {SHOW_DEMO_DB && (
               demoExists ? (
                 <button
                   disabled
@@ -271,6 +300,7 @@ export default function Connections() {
             </div>
           )}
         </section>
+        
 
         {/* Saved Connections */}
         <section aria-labelledby="saved-connections">
@@ -305,7 +335,12 @@ export default function Connections() {
                       key={c.id}
                       className="hover:bg-white/5 transition-colors"
                     >
-                      <td className="py-3 px-5 font-medium text-gray-100">{c.name}</td>
+                      <td className="py-3 px-5 font-medium text-gray-100">
+                        {c.name}
+                        {c.name === "Demo Database" && (
+                          <span className="ml-2 text-xs text-amber-400">(Demo)</span>
+                        )}
+                      </td>
                       <td className="py-3 px-5">{typeBadge(c.dbType)}</td>
                       <td className="py-3 px-5 text-gray-400">
                         {new Date(c.createdAt).toLocaleDateString()}
@@ -328,6 +363,8 @@ export default function Connections() {
                             }}
                             className="text-red-400 hover:text-red-300 transition-colors"
                             aria-label={`Delete connection ${c.name}`}
+                            disabled={SHOW_DEMO}
+                            title={SHOW_DEMO ? "Disabled in demo mode" : ""}
                           >
                             <TrashIcon className="w-5 h-5" />
                           </button>
@@ -366,6 +403,8 @@ export default function Connections() {
               <button
                 onClick={deleteConnection}
                 className="px-5 py-2 rounded-md bg-red-600 hover:bg-red-500 text-white font-semibold shadow hover:shadow-red-500/30 transition-all"
+                disabled={SHOW_DEMO}
+                title={SHOW_DEMO ? "Disabled in demo mode" : ""}
               >
                 Delete
               </button>

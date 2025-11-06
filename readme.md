@@ -195,10 +195,13 @@ Jump in, say hi, and help us build something awesome together.
 
 ## ⚙️ Environment Variables
 
+
+
 | Variable | Description | Default |
 |-----------|--------------|----------|
 | `VITE_API_URL` | URL of the backend API | `http://localhost:8080` |
 | `VITE_ALLOW_DEMO_DB` | Enables the “Connect Demo Database” button | `false` |
+| `VITE_DEMO_MODE` | Demo Mode for demo site | `false` |
 | `VITE_DEMO_DB_URL` | Connection string for the demo PostgreSQL database | `postgresql://demo:demo@guardrail-demo-db:5432/guardrail_demo` |
 
 ---
