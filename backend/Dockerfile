@@ -10,14 +10,16 @@ COPY pnpm-lock.yaml* ./
 RUN npm install -g pnpm
 RUN pnpm install --no-frozen-lockfile
 
-# Copy source code
+# Copy source code and Prisma schema
 COPY . .
+# or if your schema is in /prisma specifically:
+# COPY prisma ./prisma
 
-# Build TypeScript
-RUN pnpm run build
-
-# Generate Prisma client (ensures it's available later)
+# ✅ Generate Prisma client BEFORE building TypeScript
 RUN pnpm prisma generate
+
+# ✅ Now build TypeScript (has generated client available)
+RUN pnpm run build
 
 
 # =====================
@@ -42,7 +44,7 @@ COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 # Environment variables (edit as needed)
 ENV NODE_ENV=production
 ENV GUARDRAILS_DB_URL=postgresql://postgres:postgres@guardrail-db:5432/guardrails
-ENV DEMO_DATABASE_URL=mysql://root:password@guardrail-db:3306/guardrail_demo
+ENV DEMO_DATABASE_URL=postgresql://demo:demo@guardrail-demo-db:5432/guardrail_demo
 
 EXPOSE 8080
 
