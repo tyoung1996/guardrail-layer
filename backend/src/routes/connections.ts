@@ -24,15 +24,24 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
     const Body = z.object({
       name: z.string().min(1),
       dbType: z.enum(["mysql", "postgres", "mssql", "sqlite"]).default("mysql"),
-      connectionUrl: z.string().min(1),
-      userId: z.string().min(1),
+      connectionUrl: z.string().min(1)
     });
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
+    const ownerUserId = (req.user as any)?.userId;
+    if (!ownerUserId) return reply.code(400).send({ error: "Authenticated user missing" });
+
     try {
       req.log.info({ msg: "Creating new connection with data", data: parsed.data });
-      const created = await prisma.connection.create({ data: parsed.data });
+      const created = await prisma.connection.create({
+        data: {
+          name: parsed.data.name,
+          dbType: parsed.data.dbType,
+          connectionUrl: parsed.data.connectionUrl,
+          userId: ownerUserId
+        }
+      });
       req.log.info(`Connection created with id: ${created.id}`);
 
       let status = "down";
