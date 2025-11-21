@@ -2,12 +2,19 @@
   "compilerOptions": {
     "target": "es2020",
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "verbatimModuleSyntax": false
   },
-  "include": ["src"]
+  "paths": {
+    "*": ["*", "*.ts", "*.js"]
+  },
+  "include": ["src/**/*"]
 }

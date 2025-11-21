@@ -1,4 +1,3 @@
-
 <img width="1184" height="864" alt="banner" src="https://github.com/user-attachments/assets/bc8d1f8f-3e81-4051-bbdd-29cdb3cf44bb" />
 
 # 🧱 Guardrail Layer — Self‑Hosted AI Data Guardrail System  
@@ -31,6 +30,13 @@
 ## ⚡ Overview
 
 **Guardrail Layer** is an open-source, self-hosted backend that acts as a **data privacy firewall** between your database and any AI model, automation, or analytics tool.  
+
+Guardrail Layer now includes a complete **RBAC (Role‑Based Access Control) system**, allowing you to control:
+
+- Which users can access which database connections  
+- Which roles apply which redaction rules  
+- What level of data each user can see inside the Chat/AI interface  
+
 It automatically enforces **redaction, access rules, and audit logging** — so you can safely query and expose real data without risking leaks.  
 
 Think of it as **your data’s personal bodyguard**, working quietly in the background while you build amazing things.
@@ -62,25 +68,28 @@ https://github.com/user-attachments/assets/e7176a61-b538-4142-b216-6dd18a12990f
 ## 🧩 Features
 
 - 🔒 **Automatic Redaction Engine** — Hide or mask sensitive columns at query time  
-- 🌐 **Global Regex Redactions** — Detect and redact emails, SSNs, or credit cards across all tables  
-- 🧩 **Role-Aware Redactions** *(coming soon)* — Apply privacy rules by user role  
-- 💬 **Natural Language Querying** — Safely connect LLMs to real data  
-- 🧠 **Schema-Aware Metadata** — Context-aware AI queries that respect privacy  
-- 📜 **Comprehensive Audit Logging** — Every query, rule change, and redaction is recorded  
-- 🧪 **Built-In Demo Database** — Explore Guardrail Layer instantly with sample data  
-- ⚙️ **Dockerized Deployment** — Run anywhere, from local dev to production  
-- 🧱 **Extensible Architecture** — Node.js + Prisma foundation for easy integration  
+- 🌐 **Global Regex Redactions** — Detect and redact emails, SSNs, phone numbers, IDs across all tables  
+- 🧩 **Role‑Based Redactions (NEW)** — Assign per‑role redaction rules that merge with global rules  
+- 👥 **User & Role Management (NEW)** — Create users, create roles, assign users to roles  
+- 🔑 **Connection‑Level Permissions (NEW)** — Control which roles can access which database connections  
+- 🧠 **Unified Redaction Pipeline (NEW)** — Merges Global + Role‑Level + Connection Rules automatically  
+- 🛡️ **Permission‑Aware Chat Endpoint** — LLM queries only see the columns allowed for that user’s roles  
+- 💬 **Natural Language Querying** — Safely convert English → SQL → Redacted Output  
+- 📜 **Comprehensive Audit Logging** — Track all queries, redactions, rule changes, logins, and role actions  
+- 🧪 **Built‑In Demo Database** — Explore Guardrail Layer instantly with sample e‑commerce data  
+- 🧱 **Extensible Architecture** — Node.js + Prisma foundation for self‑hosting anywhere  
 
 ---
 
 ## 🆕 Recent Updates
 
-- 🌐 Added **Global Regex Redaction Rules** (pattern-based redactions across all tables)  
-- 📜 Improved **Audit Log Coverage** for rule creation, updates, and deletions  
-- 🖥️ Updated **Redaction Management UI** — cleaner layout, real-time feedback  
-- 🧩 Added **Pattern Validation** and smarter error handling for regex inputs  
-- 🧠 Foundation for **Role-Based Access** and contextual redaction logic  
-- 🐳 Improved **Docker Compose** reliability & startup sequence  
+- 👥 Added **full User + Role Management**  
+- 🔑 Added **Connection → Role permissions**  
+- 🧩 Added **Role‑Based Redaction Rules**  
+- 🧱 Added **Unified Redaction Engine** (global + role + connection rules merged automatically)  
+- 🛡️ Added **LLM‑Aware permission enforcement** in `/chat`  
+- 📜 Improved **Audit Logging** for roles, redactions, and user activity  
+- 🐳 Improved **Docker build flow** and added default admin bootstrap  
 
 *(See the [Changelog](https://github.com/tyoung1996/guardrail-layer/commits/main) for details.)*
 
@@ -141,6 +150,34 @@ docker compose up --build
 ```
 
 Once running, open the app at **http://localhost:8081**
+
+---
+
+## 🔐 Default Admin User
+
+When Guardrail Layer starts for the first time, it automatically creates a default admin user:
+
+```
+Email: **admin@localhost**  
+Password: *(randomly generated and printed in logs)*
+```
+
+Example log output:
+
+```
+guardrail-backend | ✅ Default admin user created:
+guardrail-backend |    Email: admin@localhost
+guardrail-backend |    Password: -bHV1XbCqzu8wBVf
+```
+
+You must log in with this account to:
+- Create roles  
+- Assign users to roles  
+- Assign connections to roles  
+- Manage all redaction rules  
+- Access the full Admin dashboard  
+
+⚠️ **Important:** Change the password immediately in production!
 
 ---
 

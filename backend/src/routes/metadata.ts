@@ -3,6 +3,80 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 
+// RBAC helpers
+async function requirePermission(prisma: any, req: any, reply: any, connectionId: string) {
+  const userId = req.user?.userId;
+
+  if (!userId) {
+    reply.code(401).send({ error: "Unauthorized — no user" });
+    return false;
+  }
+
+  // Check if user is system admin (DB verified)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true }
+  });
+
+  if (user?.isAdmin) {
+    // Admin bypass for all connections
+    return true;
+  }
+
+  // Normal RBAC permission check
+  const roles = req.user?.roles || [];
+
+  const allowed = await prisma.connectionPermission.findFirst({
+    where: {
+      connectionId,
+      OR: [
+        { userId },
+        { role: { name: { in: roles } } }
+      ]
+    }
+  });
+
+  if (!allowed) {
+    reply.code(403).send({ error: "Forbidden — no permission for this connection" });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireRole(prisma: any, req: any, reply: any, roles: string[]) {
+  const userId = req.user?.userId;
+  if (!userId) {
+    reply.code(401).send({ error: "Unauthorized — no user" });
+    return false;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      isAdmin: true,
+      roles: { select: { role: { select: { name: true } } } }
+    }
+  });
+
+  if (!user) {
+    reply.code(401).send({ error: "Unauthorized — user not found" });
+    return false;
+  }
+
+  // Admin bypass
+  if (user.isAdmin) return true;
+
+  const userRoles = user.roles.map((r: any) => r.role.name);
+
+  if (!roles.some(r => userRoles.includes(r))) {
+    reply.code(403).send({ error: "Forbidden — requires one of roles: " + roles.join(", ") });
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Metadata Routes
  * 
@@ -20,8 +94,10 @@ import type { PrismaClient } from "@prisma/client";
 export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient) {
   
   // Get all table metadata for a connection
-  app.get<{ Params: { connectionId: string } }>("/metadata/:connectionId", async (req, reply) => {
+  app.get<{ Params: { connectionId: string } }>("/metadata/:connectionId", { preHandler: (app as any).auth }, async (req, reply) => {
     const { connectionId } = req.params;
+    const allowed = await requirePermission(prisma, req, reply, connectionId);
+    if (!allowed) return;
     try {
       const tables = await prisma.tableMetadata.findMany({
         where: { connectionId },
@@ -37,8 +113,11 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
   // Get metadata for a specific table
   app.get<{ Params: { connectionId: string; tableName: string } }>(
     "/metadata/:connectionId/:tableName",
+    { preHandler: (app as any).auth },
     async (req, reply) => {
       const { connectionId, tableName } = req.params;
+      const allowed = await requirePermission(prisma, req, reply, connectionId);
+      if (!allowed) return;
       try {
         const table = await prisma.tableMetadata.findUnique({
           where: { connectionId_tableName: { connectionId, tableName } },
@@ -56,8 +135,12 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
   // Create or update table metadata
   app.post<{ Params: { connectionId: string; tableName: string } }>(
     "/metadata/:connectionId/:tableName",
+    { preHandler: (app as any).auth },
     async (req, reply) => {
       const { connectionId, tableName } = req.params;
+      const allowed = await requirePermission(prisma, req, reply, connectionId);
+      if (!allowed) return;
+      if (!await requireRole(prisma, req, reply, ["admin", "analyst"])) return;
       const Body = z.object({
         description: z.string().optional(),
         notes: z.string().optional(),
@@ -85,7 +168,7 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
   );
 
   // Upsert table metadata via POST /metadata/table
-  app.post("/metadata/table", async (req, reply) => {
+  app.post("/metadata/table", { preHandler: (app as any).auth }, async (req, reply) => {
     const Body = z.object({
       connectionId: z.string(),
       tableName: z.string(),
@@ -97,6 +180,9 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
     const { connectionId, tableName, description, notes, tags } = parsed.data;
+    const allowed = await requirePermission(prisma, req, reply, connectionId);
+    if (!allowed) return;
+    if (!await requireRole(prisma, req, reply, ["admin", "analyst"])) return;
     const tagsArray = Array.isArray(tags) ? tags : tags?.split(",").map(t => t.trim()) ?? [];
 
     try {
@@ -113,7 +199,7 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
   });
 
   // Upsert column metadata via POST /metadata/column
-  app.post("/metadata/column", async (req, reply) => {
+  app.post("/metadata/column", { preHandler: (app as any).auth }, async (req, reply) => {
     const Body = z.object({
       tableMetadataId: z.string(),
       columnName: z.string(),
@@ -123,6 +209,16 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
     });
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+
+    // Resolve connectionId via tableMetadata lookup
+    const tableMeta = await prisma.tableMetadata.findUnique({
+      where: { id: parsed.data.tableMetadataId }
+    });
+    if (!tableMeta) return reply.code(404).send({ error: "Table metadata not found" });
+
+    const allowed = await requirePermission(prisma, req, reply, tableMeta.connectionId);
+    if (!allowed) return;
+    if (!await requireRole(prisma, req, reply, ["admin", "analyst"])) return;
 
     const { tableMetadataId, columnName, description, example, importance } = parsed.data;
 

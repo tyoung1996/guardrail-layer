@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../lib/axios";
 import {
   Shield,
   Eye,
@@ -51,9 +51,34 @@ type GlobalRule = {
   replacement: string;
   role?: string;
 };
-
+type RoleRuleBlob = {
+  [tableName: string]: {
+    [columnName: string]: {
+      ruleType: Rule["ruleType"];
+      replacementText?: string;
+    };
+  };
+};
 export default function Redactions() {
-  const { connectionId } = useParams();
+  const params = useParams();
+
+  // Normalize roleId and connectionId from the route structure
+  const { id, connectionId } = params as { id?: string; connectionId?: string };
+
+  // Determine mode:
+  // 1) /roles/:id/redactions/:connectionId  → ROLE mode
+  // 2) /redactions/:connectionId            → CONNECTION mode
+  const MODE: "ROLE" | "CONNECTION" = id && connectionId ? "ROLE" : "CONNECTION";
+
+  // Base endpoints for rules
+  const RULES_BASE =
+    MODE === "ROLE"
+      ? `${API_URL}/redactions/role/${connectionId}`
+      : `${API_URL}/redactions/${connectionId}`;
+
+  // Global regex rules endpoint (used by modal in both modes)
+  const GLOBAL_BASE = `${API_URL}/redactions/global`;
+
   const [rules, setRules] = useState<Rule[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,19 +89,46 @@ export default function Redactions() {
   const [metadata, setMetadata] = useState<Record<string, Metadata>>({});
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
-  
+
+  // Role-level rules blob (only used in ROLE mode)
+  const [roleRuleBlob, setRoleRuleBlob] = useState<RoleRuleBlob>({});
+
   // Global modal state
   const [showGlobalModal, setShowGlobalModal] = useState(false);
   const [globalRules, setGlobalRules] = useState<GlobalRule[]>([]);
   const [globalModalLoading, setGlobalModalLoading] = useState(false);
   const [globalModalError, setGlobalModalError] = useState<string | null>(null);
-  const [newGlobalRule, setNewGlobalRule] = useState<GlobalRule>({ name: "", pattern: "", replacement: "", role: "" });
+  const [newGlobalRule, setNewGlobalRule] = useState<GlobalRule>({
+    name: "",
+    pattern: "",
+    replacement: "",
+    role: "",
+  });
   const [deletedGlobalRuleIds, setDeletedGlobalRuleIds] = useState<string[]>([]);
-  
+
   // Regex builder state
   const [regexTestInput, setRegexTestInput] = useState("");
   const [regexTestOutput, setRegexTestOutput] = useState("");
   const [showRegexBuilder, setShowRegexBuilder] = useState(false);
+
+  // Helper to convert roleRuleBlob into the flat Rule[] used by the table UI
+  const roleBlobToRules = (blob: RoleRuleBlob, connId?: string | null): Rule[] => {
+    if (!blob) return [];
+    const result: Rule[] = [];
+    Object.entries(blob).forEach(([tableName, cols]) => {
+      Object.entries(cols).forEach(([columnName, cfg]) => {
+        result.push({
+          id: `${tableName}.${columnName}`,
+          connectionId: connId ?? "",
+          tableName,
+          columnName,
+          ruleType: cfg.ruleType,
+          replacementText: cfg.replacementText,
+        });
+      });
+    });
+    return result;
+  };
 
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -98,16 +150,35 @@ export default function Redactions() {
       setLoading(true);
       setError(null);
       try {
-        const [rulesRes, schemaRes] = await Promise.all([
-          axios.get(`${API_URL}/redactions/${connectionId}`),
-          axios.get(`${API_URL}/schema/${connectionId}`)
-        ]);
-        setRules(rulesRes.data);
-        setColumns(
-          Array.isArray(schemaRes.data)
-            ? schemaRes.data
-            : schemaRes.data.schema || schemaRes.data.columns || []
-        );
+        // Load rules depending on mode
+        if (MODE === "ROLE") {
+          const res = await axios.get(RULES_BASE);
+          const allRoleRedactions = Array.isArray(res.data) ? res.data : [];
+          const current = allRoleRedactions.find((r: any) => r.roleId === id);
+          const blob: RoleRuleBlob = (current?.rules as RoleRuleBlob) || {};
+          setRoleRuleBlob(blob);
+          setRules(roleBlobToRules(blob, connectionId));
+        } else {
+          const rulesRes = await axios.get(RULES_BASE);
+          setRules(Array.isArray(rulesRes.data) ? rulesRes.data : []);
+        }
+
+        // Load schema for the connection so we can show tables/columns
+        let schemaRes: any = [];
+        if (connectionId) {
+          const resp = await axios.get(`${API_URL}/schema/${connectionId}`);
+          schemaRes = resp?.data ?? [];
+        }
+        const rawSchema: any = schemaRes || [];
+        const normalized =
+          Array.isArray(rawSchema)
+            ? rawSchema
+            : Array.isArray(rawSchema.schema)
+            ? rawSchema.schema
+            : Array.isArray(rawSchema.columns)
+            ? rawSchema.columns
+            : [];
+        setColumns(normalized);
       } catch (err) {
         setError("Failed to load data. Please try again later.");
       } finally {
@@ -115,9 +186,11 @@ export default function Redactions() {
       }
     }
     fetchData();
-  }, [connectionId]);
+  }, [MODE, RULES_BASE, connectionId, id]);
 
-  const fetchMetadata = async (tableName: string) => {
+
+   const fetchMetadata = async (tableName: string) => {
+    if (!connectionId) return;
     try {
       const res = await axios.get(`${API_URL}/metadata/${connectionId}/${tableName}`);
       setMetadata((prev) => ({
@@ -128,7 +201,10 @@ export default function Redactions() {
           tags: Array.isArray(res.data.tags)
             ? res.data.tags
             : typeof res.data.tags === "string"
-              ? res.data.tags.split(",").map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
+              ? res.data.tags
+                  .split(",")
+                  .map((tag: string) => tag.trim())
+                  .filter((tag: string) => tag.length > 0)
               : [],
         },
       }));
@@ -143,6 +219,8 @@ export default function Redactions() {
   };
 
   const saveMetadata = async (tableName: string) => {
+    if (MODE === "ROLE") return; // metadata not editable in role mode
+    if (!connectionId) return;
     if (DEMO_MODE) {
       showSuccess("Demo mode — changes aren’t saved.");
       return;
@@ -166,14 +244,45 @@ export default function Redactions() {
       return;
     }
     try {
-      await axios.post(`${API_URL}/redactions`, {
-        connectionId,
-        tableName: col.table,
-        columnName: col.name,
-        ruleType: newRuleType,
-      });
-      const rulesRes = await axios.get(`${API_URL}/redactions/${connectionId}`);
-      setRules(rulesRes.data);
+      if (MODE === "ROLE") {
+        if (!id || !connectionId) return;
+
+        // Update local blob
+        const updatedBlob: RoleRuleBlob = { ...roleRuleBlob };
+        if (!updatedBlob[col.table]) updatedBlob[col.table] = {};
+
+        if (newRuleType === "EXPOSE") {
+          // Remove rule for this column
+          delete updatedBlob[col.table][col.name];
+          if (Object.keys(updatedBlob[col.table]).length === 0) {
+            delete updatedBlob[col.table];
+          }
+        } else {
+          updatedBlob[col.table][col.name] = {
+            ...(updatedBlob[col.table]?.[col.name] || {}),
+            ruleType: newRuleType,
+          };
+        }
+
+        setRoleRuleBlob(updatedBlob);
+        setRules(roleBlobToRules(updatedBlob, connectionId));
+
+        await axios.post(`${API_URL}/redactions/role`, {
+          roleId: id,
+          connectionId,
+          rules: updatedBlob,
+        });
+      } else {
+        // Connection-level rule — per-column API
+        await axios.post(`${API_URL}/redactions`, {
+          connectionId,
+          tableName: col.table,
+          columnName: col.name,
+          ruleType: newRuleType,
+        });
+        const rulesRes = await axios.get(RULES_BASE);
+        setRules(Array.isArray(rulesRes.data) ? rulesRes.data : []);
+      }
       showSuccess(`Rule updated for ${col.name}`);
     } catch {
       setError("Failed to update rule");
@@ -186,14 +295,39 @@ export default function Redactions() {
       return;
     }
     try {
-      await axios.post(`${API_URL}/redactions/update`, {
-        connectionId,
-        tableName: col.table,
-        columnName: col.name,
-        ...updatedFields,
-      });
-      const rulesRes = await axios.get(`${API_URL}/redactions/${connectionId}`);
-      setRules(rulesRes.data);
+      if (MODE === "ROLE") {
+        if (!id || !connectionId) return;
+
+        const updatedBlob: RoleRuleBlob = { ...roleRuleBlob };
+        if (!updatedBlob[col.table]) updatedBlob[col.table] = {};
+        const existing = updatedBlob[col.table][col.name] || {
+          ruleType: "REDACT" as Rule["ruleType"],
+        };
+
+        updatedBlob[col.table][col.name] = {
+          ...existing,
+          replacementText: updatedFields.replacementText ?? existing.replacementText,
+        };
+
+        setRoleRuleBlob(updatedBlob);
+        setRules(roleBlobToRules(updatedBlob, connectionId));
+
+        await axios.post(`${API_URL}/redactions/role`, {
+          roleId: id,
+          connectionId,
+          rules: updatedBlob,
+        });
+      } else {
+        // For connection-level, we just update the redaction rule row
+        await axios.post(`${API_URL}/redactions`, {
+          connectionId,
+          tableName: col.table,
+          columnName: col.name,
+          replacement: updatedFields.replacementText ?? "",
+        });
+        const rulesRes = await axios.get(RULES_BASE);
+        setRules(Array.isArray(rulesRes.data) ? rulesRes.data : []);
+      }
     } catch {
       setError("Failed to update rule");
     }
@@ -203,7 +337,7 @@ export default function Redactions() {
     setGlobalModalLoading(true);
     setGlobalModalError(null);
     try {
-      const res = await axios.get(`${API_URL}/redactions/global`);
+      const res = await axios.get(`${GLOBAL_BASE}`);
       setGlobalRules(res.data || []);
     } catch {
       setGlobalModalError("Failed to load global regex rules.");
@@ -259,7 +393,7 @@ export default function Redactions() {
     try {
       for (const id of deletedGlobalRuleIds) {
         try {
-          await axios.delete(`${API_URL}/redactions/global/${id}`);
+          await axios.delete(`${GLOBAL_BASE}/${id}`);
         } catch (err) {
           console.warn("Failed to delete rule", id, err);
         }
@@ -274,7 +408,7 @@ export default function Redactions() {
           role: rule.role ?? "",
         };
         if (!payload.name || !payload.pattern) continue;
-        await axios.post(`${API_URL}/redactions/global`, payload);
+        await axios.post(`${GLOBAL_BASE}`, payload);
       }
 
       setShowGlobalModal(false);
@@ -293,13 +427,42 @@ export default function Redactions() {
       return;
     }
     try {
-      await axios.post(`${API_URL}/redactions/table`, {
-        connectionId,
-        tableName,
-        ruleType: newRuleType,
-      });
-      const rulesRes = await axios.get(`${API_URL}/redactions/${connectionId}`);
-      setRules(rulesRes.data);
+      if (MODE === "ROLE") {
+        if (!id || !connectionId) return;
+
+        const updatedBlob: RoleRuleBlob = { ...roleRuleBlob };
+        const colsForTable = columns.filter((c) => c.table === tableName);
+
+        if (newRuleType === "EXPOSE") {
+          // Clear all rules for this table
+          delete updatedBlob[tableName];
+        } else {
+          if (!updatedBlob[tableName]) updatedBlob[tableName] = {};
+          colsForTable.forEach((col) => {
+            updatedBlob[tableName][col.name] = {
+              ...(updatedBlob[tableName]?.[col.name] || {}),
+              ruleType: newRuleType,
+            };
+          });
+        }
+
+        setRoleRuleBlob(updatedBlob);
+        setRules(roleBlobToRules(updatedBlob, connectionId));
+
+        await axios.post(`${API_URL}/redactions/role`, {
+          roleId: id,
+          connectionId,
+          rules: updatedBlob,
+        });
+      } else {
+        await axios.post(`${API_URL}/redactions/table`, {
+          connectionId,
+          tableName,
+          ruleType: newRuleType,
+        });
+        const rulesRes = await axios.get(RULES_BASE);
+        setRules(Array.isArray(rulesRes.data) ? rulesRes.data : []);
+      }
       showSuccess(`Applied ${newRuleType} to all columns in ${tableName}`);
     } catch {
       setError("Failed to update table rule");
@@ -695,7 +858,7 @@ export default function Redactions() {
                   className="bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg shadow-violet-500/20 transition-all flex items-center gap-2"
                 >
                   <Shield className="w-5 h-5" />
-                  Global Regex Rules
+                  {MODE === "ROLE" ? "Role Regex Rules" : "Global Regex Rules"}
                 </button>
                 <button
                   onClick={() => setShowRemovedTables(!showRemovedTables)}
@@ -769,147 +932,149 @@ export default function Redactions() {
                     {/* Table Content */}
                     {!isCollapsed && (
                       <div className="p-6 space-y-6">
-                        {/* Metadata Section */}
-                        <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-5">
-                          <div>
-                            <label className="text-sm font-semibold text-slate-400 mb-2 block">Description</label>
-                            <textarea
-                              className="w-full bg-slate-900/70 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
-                              rows={2}
-                              value={metadata[tableName]?.description || ""}
-                              onChange={(e) =>
-                                setMetadata((prev) => ({
-                                  ...prev,
-                                  [tableName]: {
-                                    ...prev[tableName],
-                                    description: e.target.value,
-                                  },
-                                }))
-                              }
-                              placeholder="Add a description for this table..."
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-semibold text-slate-400 mb-2 block">Notes</label>
-                            <textarea
-                              className="w-full bg-slate-900/70 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
-                              rows={2}
-                              value={metadata[tableName]?.notes || ""}
-                              onChange={(e) =>
-                                setMetadata((prev) => ({
-                                  ...prev,
-                                  [tableName]: {
-                                    ...prev[tableName],
-                                    notes: e.target.value,
-                                  },
-                                }))
-                              }
-                              placeholder="Add notes or additional context..."
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-semibold text-slate-400 mb-2 block">Tags</label>
-                            <div
-                              className="flex flex-wrap items-center gap-2 bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2.5 min-h-[46px] cursor-text"
-                              onClick={() => document.getElementById(`${tableName}-tags-input`)?.focus()}
-                            >
-                              {metadata[tableName]?.tags?.map((tag, tagIdx) => (
-                                <span
-                                  key={`${tag}-${tagIdx}`}
-                                  className="bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
-                                >
-                                  {tag}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setMetadata((prev) => ({
-                                        ...prev,
-                                        [tableName]: {
-                                          ...prev[tableName],
-                                          tags: prev[tableName].tags.filter((_, i) => i !== tagIdx),
-                                        },
-                                      }));
-                                    }}
-                                    className="hover:text-red-400 transition-colors"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </span>
-                              ))}
-                              <input
-                                id={`${tableName}-tags-input`}
-                                type="text"
-                                className="bg-transparent text-slate-200 focus:outline-none min-w-[120px] flex-1 py-1"
-                                value={tagInputs[tableName] || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val.includes(",")) {
-                                    const newTags = val
-                                      .split(",")
-                                      .map((t) => t.trim())
-                                      .filter((t) => t.length > 0);
-                                    if (newTags.length > 0) {
-                                      setMetadata((prev) => ({
-                                        ...prev,
-                                        [tableName]: {
-                                          ...prev[tableName],
-                                          tags: [...(prev[tableName]?.tags || []), ...newTags],
-                                        },
-                                      }));
-                                    }
-                                    setTagInputs((prev) => ({ ...prev, [tableName]: "" }));
-                                  } else {
-                                    setTagInputs((prev) => ({ ...prev, [tableName]: val }));
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if ((e.key === "Enter" || e.key === ",") && (tagInputs[tableName]?.trim() || "")) {
-                                    e.preventDefault();
-                                    const newTag = tagInputs[tableName].trim();
-                                    if (newTag && !(metadata[tableName]?.tags || []).includes(newTag)) {
-                                      setMetadata((prev) => ({
-                                        ...prev,
-                                        [tableName]: {
-                                          ...prev[tableName],
-                                          tags: [...(prev[tableName]?.tags || []), newTag],
-                                        },
-                                      }));
-                                    }
-                                    setTagInputs((prev) => ({ ...prev, [tableName]: "" }));
-                                  } else if (
-                                    e.key === "Backspace" &&
-                                    !tagInputs[tableName] &&
-                                    (metadata[tableName]?.tags?.length ?? 0) > 0
-                                  ) {
-                                    setMetadata((prev) => ({
-                                      ...prev,
-                                      [tableName]: {
-                                        ...prev[tableName],
-                                        tags: prev[tableName].tags.slice(0, -1),
-                                      },
-                                    }));
-                                  }
-                                }}
-                                placeholder="Add tags (press Enter)"
+                        {/* Metadata Section (hidden for ROLE mode) */}
+                        {MODE !== "ROLE" && (
+                          <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 space-y-5">
+                            <div>
+                              <label className="text-sm font-semibold text-slate-400 mb-2 block">Description</label>
+                              <textarea
+                                className="w-full bg-slate-900/70 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+                                rows={2}
+                                value={metadata[tableName]?.description || ""}
+                                onChange={(e) =>
+                                  setMetadata((prev) => ({
+                                    ...prev,
+                                    [tableName]: {
+                                      ...prev[tableName],
+                                      description: e.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="Add a description for this table..."
                               />
                             </div>
-                          </div>
 
-                          <div className="flex justify-end pt-2">
-                            <button
-                              onClick={() => saveMetadata(tableName)}
-                              className="bg-violet-600 hover:bg-violet-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all flex items-center gap-2"
-                              disabled={DEMO_MODE}
-                              title={DEMO_MODE ? "Disabled in demo mode" : ""}
-                            >
-                              <Save className="w-4 h-4" />
-                              Save Metadata
-                            </button>
+                            <div>
+                              <label className="text-sm font-semibold text-slate-400 mb-2 block">Notes</label>
+                              <textarea
+                                className="w-full bg-slate-900/70 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+                                rows={2}
+                                value={metadata[tableName]?.notes || ""}
+                                onChange={(e) =>
+                                  setMetadata((prev) => ({
+                                    ...prev,
+                                    [tableName]: {
+                                      ...prev[tableName],
+                                      notes: e.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="Add notes or additional context..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-semibold text-slate-400 mb-2 block">Tags</label>
+                              <div
+                                className="flex flex-wrap items-center gap-2 bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2.5 min-h-[46px] cursor-text"
+                                onClick={() => document.getElementById(`${tableName}-tags-input`)?.focus()}
+                              >
+                                {metadata[tableName]?.tags?.map((tag, tagIdx) => (
+                                  <span
+                                    key={`${tag}-${tagIdx}`}
+                                    className="bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
+                                  >
+                                    {tag}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMetadata((prev) => ({
+                                          ...prev,
+                                          [tableName]: {
+                                            ...prev[tableName],
+                                            tags: prev[tableName].tags.filter((_, i) => i !== tagIdx),
+                                          },
+                                        }));
+                                      }}
+                                      className="hover:text-red-400 transition-colors"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </span>
+                                ))}
+                                <input
+                                  id={`${tableName}-tags-input`}
+                                  type="text"
+                                  className="bg-transparent text-slate-200 focus:outline-none min-w-[120px] flex-1 py-1"
+                                  value={tagInputs[tableName] || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val.includes(",")) {
+                                      const newTags = val
+                                        .split(",")
+                                        .map((t) => t.trim())
+                                        .filter((t) => t.length > 0);
+                                      if (newTags.length > 0) {
+                                        setMetadata((prev) => ({
+                                          ...prev,
+                                          [tableName]: {
+                                            ...prev[tableName],
+                                            tags: [...(prev[tableName]?.tags || []), ...newTags],
+                                          },
+                                        }));
+                                      }
+                                      setTagInputs((prev) => ({ ...prev, [tableName]: "" }));
+                                    } else {
+                                      setTagInputs((prev) => ({ ...prev, [tableName]: val }));
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if ((e.key === "Enter" || e.key === ",") && (tagInputs[tableName]?.trim() || "")) {
+                                      e.preventDefault();
+                                      const newTag = tagInputs[tableName].trim();
+                                      if (newTag && !(metadata[tableName]?.tags || []).includes(newTag)) {
+                                        setMetadata((prev) => ({
+                                          ...prev,
+                                          [tableName]: {
+                                            ...prev[tableName],
+                                            tags: [...(prev[tableName]?.tags || []), newTag],
+                                          },
+                                        }));
+                                      }
+                                      setTagInputs((prev) => ({ ...prev, [tableName]: "" }));
+                                    } else if (
+                                      e.key === "Backspace" &&
+                                      !tagInputs[tableName] &&
+                                      (metadata[tableName]?.tags?.length ?? 0) > 0
+                                    ) {
+                                      setMetadata((prev) => ({
+                                        ...prev,
+                                        [tableName]: {
+                                          ...prev[tableName],
+                                          tags: prev[tableName].tags.slice(0, -1),
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="Add tags (press Enter)"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end pt-2">
+                              <button
+                                onClick={() => saveMetadata(tableName)}
+                                className="bg-violet-600 hover:bg-violet-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all flex items-center gap-2"
+                                disabled={DEMO_MODE}
+                                title={DEMO_MODE ? "Disabled in demo mode" : ""}
+                              >
+                                <Save className="w-4 h-4" />
+                                Save Metadata
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Columns Table */}
                         <div className="overflow-x-auto rounded-xl border border-slate-700/50">
