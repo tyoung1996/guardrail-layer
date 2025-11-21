@@ -57,7 +57,11 @@ Think of it as an **AI-ready privacy firewall** for your database.
 
 
 
-https://github.com/user-attachments/assets/e7176a61-b538-4142-b216-6dd18a12990f
+
+
+https://github.com/user-attachments/assets/0ade762e-1530-4168-92b2-0e2710dfbde5
+
+
 
 
 
