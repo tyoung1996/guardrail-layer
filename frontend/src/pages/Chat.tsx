@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../lib/axios";
 import { PaperAirplaneIcon, SparklesIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -50,15 +50,14 @@ export default function ChatPage() {
     setInput("");
 
     try {
-      const res = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await axios.post(
+        `${API_URL}/chat`,
+        {
           question: userMsg,
           connectionId: selectedConn,
-        }),
-      });
-      const data = await res.json();
+        }
+      );
+      const data = res.data;
       if (data.summary) {
         setMessages((prev) => [...prev, { role: "assistant", content: data.summary }]);
       } else if (data.error) {

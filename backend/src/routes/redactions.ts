@@ -3,6 +3,29 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 
+// Correct RBAC helper — aligns with global auth strategy
+async function requireRole(req: any, reply: any, prisma: PrismaClient, requiredRole: string) {
+  const user = req.user;
+
+  // 1. Super Admin bypass
+  if (user?.isAdmin) return true;
+
+  // 2. Check assigned roles from DB
+  const roles = await prisma.userRole.findMany({
+    where: { userId: user?.userId },
+    include: { role: true }
+  });
+
+  const roleNames = roles.map((r) => r.role.name.toLowerCase());
+
+  if (!roleNames.includes(requiredRole.toLowerCase())) {
+    reply.code(403).send({ error: `Forbidden — requires role: ${requiredRole}` });
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Handles all /redactions routes
  * 
@@ -25,8 +48,8 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   }
 
   /** List redaction rules for a specific connection */
-  app.get<{ Params: { connectionId: string } }>("/redactions/:connectionId", async (req, reply) => {
-    const { connectionId } = req.params;
+  app.get("/redactions/:connectionId", { preHandler: (app as any).auth }, async (req, reply) => {
+    const { connectionId } = req.params as any;
     try {
       const rules = await prisma.redactionRule.findMany({ where: { connectionId } });
       return reply.send(rules);
@@ -38,7 +61,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   });
 
   /** Create or update a redaction rule */
-  app.post("/redactions", async (req, reply) => {
+  app.post("/redactions", { preHandler: (app as any).auth }, async (req, reply) => {
+    // Only admins can create or modify redactions
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
     const Body = z.object({
       connectionId: z.string(),
       tableName: z.string(),
@@ -98,8 +124,11 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   });
 
   /** Delete a redaction rule by ID */
-  app.delete<{ Params: { id: string } }>("/redactions/:id", async (req, reply) => {
-    const { id } = req.params;
+  app.delete("/redactions/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+    // Only admins can delete individual redactions
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
+    const { id } = req.params as any;
     try {
       const rule = await prisma.redactionRule.findUnique({ where: { id } });
       await prisma.redactionRule.delete({ where: { id } });
@@ -113,7 +142,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   });
 
   /** Clear all redactions (globally or by connection) */
-  app.delete("/redactions/clear", async (req, reply) => {
+  app.delete("/redactions/clear", { preHandler: (app as any).auth }, async (req, reply) => {
+    // Only admins can clear redactions
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
     const { connectionId } = (req.body ?? {}) as { connectionId?: string };
     try {
       const result = connectionId
@@ -133,7 +165,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   });
 
   /** Apply a rule to an entire table (all columns) */
-  app.post("/redactions/table", async (req, reply) => {
+  app.post("/redactions/table", { preHandler: (app as any).auth }, async (req, reply) => {
+    // Only admins can apply table-wide redactions
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
     const Body = z.object({
       connectionId: z.string(),
       tableName: z.string(),
@@ -193,7 +228,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
   /** Manage global regex-based redaction patterns */
   app.register(async (global) => {
     /** List all global regex rules */
-    global.get("/redactions/global", async (_req, reply) => {
+    global.get("/redactions/global", { preHandler: (app as any).auth }, async (req, reply) => {
+      // Only admins can list global redactions
+      if (!await requireRole(req, reply, prisma, "admin")) return;
+
       try {
         const rules = await prisma.globalPatternRule.findMany({ orderBy: { createdAt: "desc" } });
         return reply.send(rules);
@@ -204,7 +242,10 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
     });
 
     /** Create or update a global regex rule */
-    global.post("/redactions/global", async (req, reply) => {
+    global.post("/redactions/global", { preHandler: (app as any).auth }, async (req, reply) => {
+      // Only admins can create global redactions
+      if (!await requireRole(req, reply, prisma, "admin")) return;
+
       const Body = z.object({
         connectionId: z.string().optional(),
         name: z.string(),
@@ -238,8 +279,11 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
     });
 
     /** Delete a global regex rule */
-    global.delete<{ Params: { id: string } }>("/redactions/global/:id", async (req, reply) => {
-      const { id } = req.params;
+    global.delete("/redactions/global/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+      // Only admins can delete global redactions
+      if (!await requireRole(req, reply, prisma, "admin")) return;
+
+      const { id } = req.params as any;
       try {
         const rule = await prisma.globalPatternRule.findUnique({ where: { id } });
         await prisma.globalPatternRule.delete({ where: { id } });
@@ -250,5 +294,68 @@ export async function redactionRoutes(app: FastifyInstance, prisma: PrismaClient
         return reply.code(500).send({ error: e.message });
       }
     });
+  });
+  /** -------------------------------
+   * ROLE-LEVEL REDACTION RULES
+   * ------------------------------- */
+
+  /** List role redactions for a connection */
+  app.get("/redactions/role/:connectionId", { preHandler: (app as any).auth }, async (req, reply) => {
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
+    const { connectionId } = req.params as any;
+    try {
+      const rules = await prisma.roleRedaction.findMany({
+        where: { connectionId },
+        include: { role: true }
+      });
+      return reply.send(rules);
+    } catch (e: any) {
+      req.log.error(e);
+      return reply.code(500).send({ error: e.message });
+    }
+  });
+
+  /** Create or update a role-level redaction */
+  app.post("/redactions/role", { preHandler: (app as any).auth }, async (req, reply) => {
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
+    const Body = z.object({
+      connectionId: z.string(),
+      roleId: z.string(),
+      rules: z.any()
+    });
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    }
+
+    const { connectionId, roleId, rules } = parsed.data;
+
+    try {
+      const upsert = await prisma.roleRedaction.upsert({
+        where: { roleId_connectionId: { roleId, connectionId } },
+        update: { rules },
+        create: { roleId, connectionId, rules }
+      });
+      return reply.send(upsert);
+    } catch (e: any) {
+      req.log.error(e);
+      return reply.code(500).send({ error: e.message });
+    }
+  });
+
+  /** Delete a role-level redaction */
+  app.delete("/redactions/role/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+    if (!await requireRole(req, reply, prisma, "admin")) return;
+
+    const { id } = req.params as any;
+    try {
+      await prisma.roleRedaction.delete({ where: { id } });
+      return reply.send({ ok: true });
+    } catch (e: any) {
+      req.log.error(e);
+      return reply.code(500).send({ error: e.message });
+    }
   });
 }

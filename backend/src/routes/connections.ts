@@ -6,7 +6,7 @@ import { PrismaClient } from "@prisma/client";
 
 export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClient) {
   // POST /connect
-  app.post("/connect", async (req, reply) => {
+  app.post("/connect", { preHandler: (app as any).auth }, async (req, reply) => {
     const body = (req.body ?? {}) as { databaseUrl?: string };
     const databaseUrl = body.databaseUrl || process.env.DATABASE_URL;
     if (!databaseUrl) return reply.code(400).send({ error: "DATABASE_URL missing" });
@@ -20,7 +20,7 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
   });
 
   // POST /connections
-  app.post("/connections", async (req, reply) => {
+  app.post("/connections", { preHandler: (app as any).auth }, async (req, reply) => {
     const Body = z.object({
       name: z.string().min(1),
       dbType: z.enum(["mysql", "postgres", "mssql", "sqlite"]).default("mysql"),
@@ -83,20 +83,52 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
     }
   });
 
-  // GET /connections
-  app.get("/connections", async (req, reply) => {
-    const Query = z.object({ userId: z.string().optional() });
-    const parsed = Query.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-
-    const connections = await prisma.connection.findMany({
-      where: parsed.data.userId ? { userId: parsed.data.userId } : undefined,
-    });
-    return connections;
+// GET /connections — return all connections user can access
+app.get("/connections", { preHandler: (app as any).auth }, async (req, reply) => {
+  const userId = (req.user as any)?.userId;
+console.log(userId)
+  // Admin bypass
+  const adminRole = await prisma.userRole.findFirst({
+    where: { userId },
+    include: { role: true },
   });
 
+  if (adminRole && adminRole.role.name.toLowerCase() === "admin") {
+    const allConnections = await prisma.connection.findMany();
+    return reply.send(allConnections);
+  }
+
+  // 1) Get user's roles
+  const roles = await prisma.userRole.findMany({
+    where: { userId },
+    select: { roleId: true },
+  });
+
+  const roleIds = roles.map((r) => r.roleId);
+
+  // 2) Get connection IDs allowed for those roles
+  const allowed = await prisma.connectionPermission.findMany({
+    where: { roleId: { in: roleIds } },
+    select: { connectionId: true },
+  });
+
+  const allowedConnectionIds = allowed.map((a) => a.connectionId);
+
+  // 3) Fetch all connections:
+  const connections = await prisma.connection.findMany({
+    where: {
+      OR: [
+        { userId }, // connections owned by user
+        { id: { in: allowedConnectionIds } }, // connections allowed by roles
+      ],
+    },
+  });
+
+  return reply.send(connections);
+});
+
   // GET /schema/:connectionId
-  app.get<{ Params: { connectionId: string } }>("/schema/:connectionId", async (req, reply) => {
+  app.get<{ Params: { connectionId: string } }>("/schema/:connectionId", { preHandler: (app as any).auth }, async (req, reply) => {
     const { connectionId } = req.params;
     const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
     if (!connection) return reply.code(404).send({ error: "Connection not found" });
@@ -141,7 +173,7 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
   });
 
   // DELETE /connections/:id
-  app.delete("/connections/:id", async (req, reply) => {
+  app.delete("/connections/:id", { preHandler: (app as any).auth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const existing = await prisma.connection.findUnique({ where: { id } });
     if (!existing) return reply.code(404).send({ error: "Connection not found" });
@@ -150,7 +182,7 @@ export async function connectionRoutes(app: FastifyInstance, prisma: PrismaClien
   });
 
   // POST /connections/test
-  app.post("/connections/test", async (req, reply) => {
+  app.post("/connections/test", { preHandler: (app as any).auth }, async (req, reply) => {
     const Body = z.object({
       dbType: z.enum(["mysql", "postgres", "mssql", "sqlite"]),
       connectionUrl: z.string().min(1),

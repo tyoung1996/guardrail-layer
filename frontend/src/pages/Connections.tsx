@@ -1,4 +1,5 @@
-import axios from "axios";
+import axios from "../lib/axios";
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,6 +11,7 @@ import {
   XCircleIcon,
   ClockIcon,
 } from "@heroicons/react/24/solid";
+import { useAuth } from "../auth/AuthProvider";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const SHOW_DEMO_DB = import.meta.env.VITE_ALLOW_DEMO_DB === "true";
@@ -18,12 +20,27 @@ const SHOW_DEMO = import.meta.env.VITE_DEMO_MODE === "true";
 type ConnStatus = "active" | "down" | "unknown";
 
 export default function Connections() {
+  const { user, token } = useAuth();
+  console.log(user)
+  if (!user) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center text-gray-200">
+        Loading user…
+      </div>
+    );
+  }
   const [connections, setConnections] = useState<any[]>([]);
   const [newConn, setNewConn] = useState({
     name: "",
     dbType: "mysql",
     connectionUrl: "",
+    userId: ""
   });
+  useEffect(() => {
+    if (user?.userId) {
+      setNewConn((prev) => ({ ...prev, userId: user.userId }));
+    }
+  }, [user]);
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -54,9 +71,11 @@ export default function Connections() {
     }
     await axios.post(`${API_URL}/connections`, {
       ...newConn,
-      userId: "demo-user-1",
+      userId: user.userId
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
     });
-    setNewConn({ name: "", dbType: "mysql", connectionUrl: "" });
+    setNewConn({ name: "", dbType: "mysql", connectionUrl: "", userId: user.userId });
     setTestStatus("idle");
     setTestMessage("");
     fetchConnections();
@@ -68,7 +87,7 @@ export default function Connections() {
         name: "Demo Database",
         dbType: "postgres",
         connectionUrl: import.meta.env.VITE_DEMO_DB_URL,
-        userId: "demo-user-1",
+        userId: user.userId
       });
       fetchConnections();
     } catch (err: any) {
@@ -88,6 +107,7 @@ export default function Connections() {
       const res = await axios.post(`${API_URL}/connections/test`, {
         dbType: newConn.dbType,
         connectionUrl: newConn.connectionUrl,
+        userId: user.userId
       });
       if (res.data.ok) {
         setTestStatus("success");
@@ -201,7 +221,7 @@ export default function Connections() {
                 id="connectionName"
                 type="text"
                 value={newConn.name}
-                onChange={(e) => setNewConn({ ...newConn, name: e.target.value })}
+                onChange={(e) => setNewConn({ ...newConn, name: e.target.value, userId: user.userId })}
                 placeholder="e.g. Production Postgres"
                 className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
               />
@@ -215,7 +235,7 @@ export default function Connections() {
               <select
                 id="dbType"
                 value={newConn.dbType}
-                onChange={(e) => setNewConn({ ...newConn, dbType: e.target.value })}
+                onChange={(e) => setNewConn({ ...newConn, dbType: e.target.value, userId: user.userId })}
                 className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-600"
               >
                 <option value="mysql">MySQL</option>
@@ -234,7 +254,7 @@ export default function Connections() {
                 id="connectionUrl"
                 type="text"
                 value={newConn.connectionUrl}
-                onChange={(e) => setNewConn({ ...newConn, connectionUrl: e.target.value })}
+                onChange={(e) => setNewConn({ ...newConn, connectionUrl: e.target.value, userId: user.userId })}
                 placeholder="postgresql://user:pass@host:5432/dbname"
                 className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
               />
@@ -354,7 +374,7 @@ export default function Connections() {
                             onClick={() => navigate(`/redactions/${c.id}`)}
                             className="px-3 py-1.5 rounded-md bg-indigo-600 text-white text-sm font-medium shadow-sm hover:bg-indigo-500 transition-colors"
                           >
-                            Configure
+                            Configure Global Rules
                           </button>
                           <button
                             onClick={() => {

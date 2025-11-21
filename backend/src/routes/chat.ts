@@ -2,9 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import OpenAI from "openai";
 import util from "util";
-import { Client as PgClient } from "pg";
-import mysql from "mysql2/promise";
+
 import type { PrismaClient } from "@prisma/client";
+import { verifyAuthToken } from "../plugins/authToken.js";
 
 // ================== Types for Schema ==================
 type RealSchema = Record<string, { columns: Array<{ name: string; type: string }> }>;
@@ -111,17 +111,53 @@ async function getRealSchema(connection: any) {
   return schema;
 }
 
-app.post('/chat', async (req, reply) => {
+app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
     const Body = z.object({
       question: z.string().min(5),
       connectionId: z.string(),
     });
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-  
+
     const { question, connectionId } = parsed.data;
     if (!openai) return reply.code(400).send({ error: "OPENAI_API_KEY not set" });
-  
+
+    // --- RBAC Permission Check ---
+    const userId = (req.user as any)?.userId;
+
+    // Load user roles once (for permissions and redactions)
+    const userRoles = await prisma.userRole.findMany({
+      where: { userId },
+      select: { roleId: true }
+    });
+    const roleIds = userRoles.map(r => r.roleId);
+
+    // 1. Load user to see if admin
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isAdmin: true },
+    });
+
+    // Admin bypass
+    if (!user?.isAdmin) {
+      // 3. Check access: user-specific or role-based
+      const permission = await prisma.connectionPermission.findFirst({
+        where: {
+          connectionId,
+          OR: [
+            { userId },               // direct assignment
+            { roleId: { in: roleIds } } // role assignment
+          ]
+        }
+      });
+
+      if (!permission) {
+        return reply.code(403).send({
+          error: "Forbidden — you do not have permission to query this connection",
+        });
+      }
+    }
+
     try {
       const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
       if (!connection) return reply.code(404).send({ error: "Connection not found" });
@@ -143,17 +179,96 @@ app.post('/chat', async (req, reply) => {
           ]
         }
       });
-      const redactedColumns = new Map<string, Set<string>>();
-      for (const r of redactions) {
-        if (!redactedColumns.has(r.tableName)) redactedColumns.set(r.tableName, new Set());
-        if (["REDACT", "REMOVE", "MASK_EMAIL", "HASH"].includes(r.ruleType)) {
-          redactedColumns.get(r.tableName)!.add(r.columnName);
+      // Load role-level redactions
+      const roleRedactions = await prisma.roleRedaction.findMany({
+        where: {
+          connectionId,
+          roleId: { in: roleIds }
+        },
+        include: { role: true }
+      });
+      console.log("ROLE REDACTIONS:", util.inspect(roleRedactions, { depth: 5 }));
+      // Load user-level redactions
+      const userRedactions = await prisma.userRedaction.findMany({
+        where: { connectionId, userId }
+      });
+      // Merge all redaction layers
+      // 1. Start with column-level redactions (legacy)
+      let effectiveRedactions = [...redactions];
+      // 2. Add role-level redaction JSON rules (merged safely)
+      for (const rr of roleRedactions) {
+        if (rr && rr.rules && typeof rr.rules === "object") {
+          for (const [tableNameFull, columnsObj] of Object.entries(rr.rules as any)) {
+            const tableName = tableNameFull.includes('.')
+              ? tableNameFull.split('.')[1]
+              : tableNameFull;
+
+            // Case 1: Object style { id: {ruleType}, name:{ruleType} }
+            if (typeof columnsObj === "object" && !Array.isArray(columnsObj)) {
+              for (const [colName, colRule] of Object.entries(columnsObj as any)) {
+                const col: any = colRule as any;
+                effectiveRedactions.push({
+                  connectionId: rr.connectionId,
+                  id: "role-" + Math.random().toString(36).slice(2),
+                  createdAt: new Date(),
+                  role: rr.role?.name ?? null,
+                  tableName,
+                  columnName: colName,
+                  ruleType: col.ruleType ?? "REDACT",
+                  replacement: col.replacement ?? null,
+                  pattern: col.pattern ?? null,
+                  redactionsApplied: false
+                });
+              }
+            }
+
+            // Case 2: Array style
+            if (Array.isArray(columnsObj)) {
+              for (const raw of columnsObj as any[]) {
+                const rule: any = raw ?? {};
+                effectiveRedactions.push({
+                  connectionId: rr.connectionId,
+                  id: "role-" + Math.random().toString(36).slice(2),
+                  createdAt: new Date(),
+                  role: rr.role?.name ?? null,
+                  tableName,
+                  columnName: rule.columnName ?? "",
+                  ruleType: rule.ruleType ?? "REDACT",
+                  replacement: rule.replacement ?? null,
+                  pattern: rule.pattern ?? null,
+                  redactionsApplied: false
+                });
+              }
+            }
+          }
         }
       }
+      // 3. Add user-level overrides (highest priority)
+      for (const ur of userRedactions) {
+        if (Array.isArray(ur.rules)) {
+          for (const r of ur.rules) {
+            effectiveRedactions.push(r as any);
+          }
+        }
+      }
+      // 🔍 DEBUG: Inspect merged redaction rules
+      console.log("🔍 Effective redactions:", util.inspect(effectiveRedactions, { depth: 5 }));
+      // Build unified redaction map
+      const unifiedRedactedColumns = new Map<string, Set<string>>();
+      for (const rule of effectiveRedactions) {
+        const table = rule.tableName;
+        const col = rule.columnName;
+        if (!table || !col) continue;
+        if (!unifiedRedactedColumns.has(table)) unifiedRedactedColumns.set(table, new Set());
+        const set = unifiedRedactedColumns.get(table);
+        if (set) set.add(col);
+      }
+      // 🔍 DEBUG: Show unified redacted columns map
+      console.log("🔍 Unified redacted columns:", util.inspect(Array.from(unifiedRedactedColumns.entries()), { depth: 5 }));
       // --- Begin redaction impact tracking ---
       const removedFromSchema: string[] = [];
       for (const [table, info] of Object.entries(realSchema)) {
-        const redacted = redactedColumns.get(table);
+        const redacted = unifiedRedactedColumns.get(table);
         if (redacted) {
           for (const col of redacted) removedFromSchema.push(`${table}.${col}`);
         }
@@ -161,7 +276,7 @@ app.post('/chat', async (req, reply) => {
       const maskedColumns = new Set<string>();
       const hashApplied = new Set<string>();
       // Debug log after building redacted columns map
-      console.log("🕶️ Redacted columns map:", util.inspect(Array.from(redactedColumns.entries()), { depth: 3 }));
+      console.log("🕶️ Redacted columns map:", util.inspect(Array.from(unifiedRedactedColumns.entries()), { depth: 3 }));
   
       // Get metadata for context (optional descriptions)
       const metadata = await prisma.tableMetadata.findMany({
@@ -175,7 +290,7 @@ app.post('/chat', async (req, reply) => {
       // Build filtered schema (remove redacted columns)
       const filteredSchema: RealSchema = {};
       for (const [table, info] of Object.entries(realSchema) as [string, { columns: Array<{ name: string; type: string }> }][]) {
-        const redacted = redactedColumns.get(table);
+        const redacted = unifiedRedactedColumns.get(table);
         filteredSchema[table] = {
           columns: info.columns.filter(c => !redacted?.has(c.name))
         };
@@ -387,14 +502,17 @@ app.post('/chat', async (req, reply) => {
             await client.end();
           }
   
+          // 🔍 Raw SQL rows BEFORE redaction
+          console.log("🔍 Raw SQL rows BEFORE redaction:", rows.slice(0, 3));
+          console.log("🔍 Applying redaction rules:", util.inspect(unifiedRedactedColumns, { depth: 5 }));
           // Success! Apply redactions
           const redactedRows = rows.map(row => {
             const out = { ...row };
             // Apply redaction rules for all tables
-            for (const [table, cols] of redactedColumns.entries()) {
+            for (const [table, cols] of unifiedRedactedColumns.entries()) {
               for (const col of cols) {
                 if (out[col] !== undefined) {
-                  const rule = redactions.find(r => r.tableName === table && r.columnName === col);
+                  const rule = effectiveRedactions.find((r: any) => r.tableName === table && r.columnName === col);
                   if (rule?.ruleType === 'MASK_EMAIL' && typeof out[col] === 'string') {
                     const parts = out[col].split('@');
                     if (parts.length === 2) {
@@ -479,7 +597,7 @@ Provide a clear, natural-language answer to the user's question based on this da
             new RegExp(`\\b${t}\\b`, "i").test(sql)
           );
 
-          const appliedRedactions = redactions.filter(r => {
+          const appliedRedactions = effectiveRedactions.filter((r: any) => {
             if (!r.columnName) return false;
 
             // Explicit: column name appears in SQL
@@ -563,4 +681,39 @@ Provide a clear, natural-language answer to the user's question based on this da
       return reply.code(500).send({ error: e.message });
     }
   });
+  // EXTERNAL API CHAT ROUTE
+  // This route allows external API token users (not session users) to chat with OpenAI.
+  // It uses verifyAuthToken middleware for authentication.
+  // Place this after the /chat route.
+  app.post(
+    "/api/chat/external",
+    { preHandler: verifyAuthToken },
+    async (req, reply) => {
+      const Body = z.object({
+        message: z.string().min(1),
+        connectionId: z.string()
+      });
+  
+      const parsed = Body.safeParse(req.body);
+      if (!parsed.success)
+        return reply.code(400).send({ error: parsed.error.flatten() });
+  
+      const { message, connectionId } = parsed.data;
+  
+      // 🔥 Call internal /chat route using Fastify inject()
+      const internalResponse = await app.inject({
+        method: "POST",
+        url: "/chat",
+        payload: {
+          question: message,
+          connectionId
+        }
+      });
+  
+      // Mirror the same result back to caller
+      return reply
+        .code(internalResponse.statusCode)
+        .send(internalResponse.json());
+    }
+  );
 }

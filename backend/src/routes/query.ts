@@ -34,7 +34,7 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
    * POST /query/run
    * Executes a raw SQL query safely.
    */
-  app.post("/query/run", async (req, reply) => {
+  app.post("/query/run", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const Body = z.object({
       connectionId: z.string(),
       sql: z.string().min(1),
@@ -53,6 +53,22 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
 
     const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
     if (!connection) return reply.code(404).send({ error: "Connection not found" });
+
+    // 🔐 Check permission: Admin bypass OR role-based connection access
+    if (!req.user?.isAdmin) {
+      const allowed = await prisma.connectionPermission.findMany({
+        where: { role: { users: { some: { userId: req.user.userId } } } },
+        select: { connectionId: true }
+      });
+
+      const allowedIds = allowed.map((a: { connectionId: string }) => a.connectionId);
+
+      if (!allowedIds.includes(connectionId)) {
+        return reply.code(403).send({
+          error: "Forbidden — you do not have permission to query this connection"
+        });
+      }
+    }
 
     const { dbType, connectionUrl } = connection;
     let rows: any[] = [];
@@ -79,7 +95,7 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
       // 🔒 Determine redactions for this connection
       const redactions = await prisma.redactionRule.findMany({ where: { connectionId } });
       const appliedRules = redactions.length > 0;
-      const hiddenColumns = redactions.map(r => `${r.tableName}.${r.columnName}`);
+      const hiddenColumns = redactions.map((r: any) => `${r.tableName}.${r.columnName}`);
 
       // Log to audit
       await prisma.auditLog.create({
@@ -113,7 +129,7 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
    * Placeholder for future AI-based query expansion.
    * (Right now, returns a dummy response for compatibility)
    */
-  app.post("/query", async (req, reply) => {
+  app.post("/query", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const Body = z.object({
       question: z.string(),
       table: z.string().optional(),

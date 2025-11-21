@@ -8,15 +8,54 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String?
-  email     String?  @unique
-  createdAt DateTime @default(now())
+  id           String  @id @default(cuid())
+  name         String?
+  email        String  @unique
+  passwordHash String // 🔐 hashed, never plaintext
+
+  isAdmin  Boolean @default(false) // optional but recommended
+  disabled Boolean @default(false)
+
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // relations
+  connections Connection[]
+  apiTokens   ApiToken[]
+  roles        UserRole[]
+  connectionPermissions ConnectionPermission[] @relation("UserConnectionPermissions")
+  userRedactions UserRedaction[]
+  auditLogs    AuditLog[]
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  label       String?
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  users       UserRole[]
+  connectionPermissions ConnectionPermission[] @relation("RoleConnectionPermissions")
+  roleRedactions RoleRedaction[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
 }
 
 model Connection {
   id             String              @id @default(cuid())
-  userId         String? // optional; no relation enforced
+  userId         String?
+  user           User?               @relation(fields: [userId], references: [id])
   name           String
   dbType         String
   connectionUrl  String
@@ -29,6 +68,23 @@ model Connection {
   tableMetadata  TableMetadata[]
   auditLogs      AuditLog[]
   globalPatterns GlobalPatternRule[]
+  apiTokens      ApiToken[]
+  permissions    ConnectionPermission[]
+  roleRedactions RoleRedaction[]
+  userRedactions UserRedaction[]
+}
+
+model ConnectionPermission {
+  id           String   @id @default(cuid())
+  connectionId String
+  userId       String?
+  roleId       String?
+
+  connection   Connection @relation(fields: [connectionId], references: [id])
+  user         User?      @relation("UserConnectionPermissions", fields: [userId], references: [id])
+  role         Role?      @relation("RoleConnectionPermissions", fields: [roleId], references: [id])
+
+  @@index([connectionId])
 }
 
 model GuardrailRule {
@@ -65,6 +121,36 @@ model RedactionRule {
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
 
+model RoleRedaction {
+  id           String   @id @default(cuid())
+  roleId       String
+  connectionId String
+  rules        Json
+
+  role        Role       @relation(fields: [roleId], references: [id])
+  connection  Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([roleId, connectionId])
+}
+
+model UserRedaction {
+  id           String   @id @default(cuid())
+  userId       String
+  connectionId String
+  rules        Json
+
+  user        User       @relation(fields: [userId], references: [id])
+  connection  Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, connectionId])
+}
+
 model TableMetadata {
   id           String   @id @default(cuid())
   connectionId String
@@ -99,6 +185,7 @@ model ColumnMetadata {
 model AuditLog {
   id           String   @id @default(cuid())
   connectionId String?
+  userId       String?
   action       String // e.g., "QUERY", "REDACTION", "LOGIN", etc.
   details      String?
   tableName    String?
@@ -110,6 +197,7 @@ model AuditLog {
   createdAt    DateTime @default(now())
 
   connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id])
 }
 
 model GlobalPatternRule {
@@ -124,4 +212,35 @@ model GlobalPatternRule {
   updatedAt    DateTime @updatedAt
 
   connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+model ApiToken {
+  id           String    @id @default(uuid())
+  name         String
+  hashedToken  String    @unique
+  userId       String?
+  connectionId String?
+  scopes       String[]  @default(["read"])
+  createdAt    DateTime  @default(now())
+  lastUsed     DateTime?
+  expiresAt    DateTime?
+  revoked      Boolean   @default(false)
+
+  logs       ApiLog[]
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id])
+}
+
+model ApiLog {
+  id         String   @id @default(uuid())
+  tokenId    String
+  route      String
+  question   String?
+  response   String?
+  sqlUsed    String?
+  statusCode Int?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  token ApiToken @relation(fields: [tokenId], references: [id])
 }
