@@ -2,13 +2,40 @@ import { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
-async function audit(prisma: PrismaClient, action: string, details: any) {
+function buildActor(req: any) {
+  const u = req.user as any;
+  return {
+    userId: u?.userId ?? null,
+    email: u?.email ?? null,
+    roles: u?.roles ?? [],
+    ip: req.ip,
+    userAgent: req.headers["user-agent"],
+  };
+}
+
+async function audit(prisma: PrismaClient, req: any, params: {
+  action: string;
+  category: string;
+  type: string;
+  severity: "info" | "warning" | "critical";
+  before?: any;
+  after?: any;
+  details?: any;
+  error?: any;
+}) {
   try {
+    const actor = buildActor(req);
     await prisma.auditLog.create({
       data: {
-        action,
-        details: JSON.stringify(details ?? {}),
-      },
+        action: params.action,
+        userId: actor.userId,
+        requestId: req.id,
+        details: JSON.stringify({
+          ...params,
+          actor,
+          timestamp: new Date().toISOString()
+        })
+      }
     });
   } catch (err) {
     console.error("Audit log failed:", err);
@@ -19,7 +46,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // GET /roles — list all roles
   //
-  app.get("/roles", { preHandler: (app as any).auth }, async (_req, reply) => {
+  app.get("/roles", { preHandler: (app as any).auth }, async (_req: any, reply: any) => {
     const roles = await prisma.role.findMany({
       orderBy: { name: "asc" }
     });
@@ -29,7 +56,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // POST /roles — create a new role
   //
-  app.post("/roles", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post("/roles", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const Body = z.object({
       name: z.string().min(1),
       label: z.string().optional(),
@@ -49,7 +76,14 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       data: { name, label, description }
     });
 
-    await audit(prisma, "role_created", role);
+    await audit(prisma, req, {
+      action: "role_created",
+      category: "role",
+      type: "create",
+      severity: "info",
+      after: role,
+      details: role
+    });
 
     return reply.code(201).send({ ok: true, role });
   });
@@ -57,7 +91,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // GET /roles/:id — get single role INCLUDING assigned users
   //
-  app.get("/roles/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.get("/roles/:id", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const role = await prisma.role.findUnique({
@@ -79,7 +113,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // PATCH /roles/:id — update a role
   //
-  app.patch("/roles/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.patch("/roles/:id", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const Body = z.object({
@@ -97,7 +131,14 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       data: parsed.data
     });
 
-    await audit(prisma, "role_updated", updated);
+    await audit(prisma, req, {
+      action: "role_updated",
+      category: "role",
+      type: "update",
+      severity: "info",
+      after: updated,
+      details: updated
+    });
 
     return { ok: true, role: updated };
   });
@@ -105,7 +146,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // DELETE /roles/:id — delete role
   //
-  app.delete("/roles/:id", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.delete("/roles/:id", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const role = await prisma.role.findUnique({ where: { id } });
@@ -113,14 +154,21 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
 
     await prisma.role.delete({ where: { id } });
 
-    await audit(prisma, "role_deleted", role);
+    await audit(prisma, req, {
+      action: "role_deleted",
+      category: "role",
+      type: "delete",
+      severity: "warning",
+      before: role,
+      details: role
+    });
 
     return { ok: true };
   });
   //
   // POST /roles/:id/assign — assign user to role
   //
-  app.post("/roles/:id/assign", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post("/roles/:id/assign", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const Body = z.object({ userId: z.string() });
     const parsed = Body.safeParse(req.body);
@@ -136,7 +184,13 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       await prisma.userRole.create({
         data: { roleId: id, userId }
       });
-      await audit(prisma, "role_user_assigned", { roleId: id, userId });
+      await audit(prisma, req, {
+        action: "role_user_assigned",
+        category: "role",
+        type: "assign_user",
+        severity: "info",
+        details: { roleId: id, userId }
+      });
     }
 
     const role = await prisma.role.findUnique({
@@ -150,7 +204,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // POST /roles/:id/unassign — remove user from role
   //
-  app.post("/roles/:id/unassign", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post("/roles/:id/unassign", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const Body = z.object({ userId: z.string() });
     const parsed = Body.safeParse(req.body);
@@ -162,7 +216,13 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       where: { roleId: id, userId }
     });
 
-    await audit(prisma, "role_user_unassigned", { roleId: id, userId });
+    await audit(prisma, req, {
+      action: "role_user_unassigned",
+      category: "role",
+      type: "unassign_user",
+      severity: "info",
+      details: { roleId: id, userId }
+    });
 
     const role = await prisma.role.findUnique({
       where: { id },
@@ -174,7 +234,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // GET /roles/:id/connections — list allowed connections for this role
   //
-  app.get("/roles/:id/connections", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.get("/roles/:id/connections", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const connections = await prisma.connectionPermission.findMany({
@@ -188,7 +248,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // POST /roles/:id/connections/assign — assign connection to role
   //
-  app.post("/roles/:id/connections/assign", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post("/roles/:id/connections/assign", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const Body = z.object({
@@ -207,7 +267,13 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       await prisma.connectionPermission.create({
         data: { roleId: id, connectionId }
       });
-      await audit(prisma, "role_connection_assigned", { roleId: id, connectionId });
+      await audit(prisma, req, {
+        action: "role_connection_assigned",
+        category: "role",
+        type: "assign_connection",
+        severity: "info",
+        details: { roleId: id, connectionId }
+      });
     }
 
     const updated = await prisma.connectionPermission.findMany({
@@ -221,7 +287,7 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
   //
   // POST /roles/:id/connections/unassign — remove connection assignment
   //
-  app.post("/roles/:id/connections/unassign", { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post("/roles/:id/connections/unassign", { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
 
     const Body = z.object({
@@ -236,7 +302,13 @@ export async function roleRoutes(app: FastifyInstance, prisma: PrismaClient) {
       where: { roleId: id, connectionId }
     });
 
-    await audit(prisma, "role_connection_unassigned", { roleId: id, connectionId });
+    await audit(prisma, req, {
+      action: "role_connection_unassigned",
+      category: "role",
+      type: "unassign_connection",
+      severity: "info",
+      details: { roleId: id, connectionId }
+    });
 
     const updated = await prisma.connectionPermission.findMany({
       where: { roleId: id },

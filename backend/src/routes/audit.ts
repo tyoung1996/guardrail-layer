@@ -25,7 +25,7 @@ async function requireRole(req: any, reply: any, prisma: PrismaClient, requiredR
     include: { role: true }
   });
 
-  const roleNames = roles.map(r => r.role.name.toLowerCase());
+  const roleNames = roles.map((r: any) => r.role.name.toLowerCase());
 
   if (!roleNames.includes(requiredRole.toLowerCase())) {
     reply.code(403).send({ error: `Forbidden — requires role: ${requiredRole}` });
@@ -36,7 +36,7 @@ async function requireRole(req: any, reply: any, prisma: PrismaClient, requiredR
 }
 
 export async function auditRoutes(app: FastifyInstance, prisma: PrismaClient) {
-  app.get('/audit', { preHandler: (app as any).auth }, async (req, reply) => {
+  app.get('/audit', { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     if (!(await requireRole(req, reply, prisma, "admin"))) return;
     try {
       const { userId, connectionId, action } = req.query as {
@@ -60,7 +60,7 @@ export async function auditRoutes(app: FastifyInstance, prisma: PrismaClient) {
     }
   });
 
-  app.post('/audit', { preHandler: (app as any).auth }, async (req, reply) => {
+  app.post('/audit', { preHandler: (app as any).auth }, async (req: any, reply: any) => {
     if (!(await requireRole(req, reply, prisma, "admin"))) return;
     const Body = z.object({
       action: z.string(),

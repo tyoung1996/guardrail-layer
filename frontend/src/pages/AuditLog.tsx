@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axios from "../lib/axios";
 
 export default function AuditLog() {
   const [logs, setLogs] = useState([]);

@@ -8,6 +8,23 @@ async function requirePermission(prisma: any, req: any, reply: any, connectionId
   const userId = req.user?.userId;
 
   if (!userId) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: "permission_denied",
+          userId: null,
+          requestId: req.id,
+          details: JSON.stringify({
+            category: "rbac",
+            type: "unauthorized_no_user",
+            severity: "warning",
+            actor: { ip: req.ip, userAgent: req.headers["user-agent"] },
+            connectionId,
+            timestamp: new Date().toISOString()
+          })
+        }
+      });
+    } catch (_) {}
     reply.code(401).send({ error: "Unauthorized — no user" });
     return false;
   }
@@ -37,6 +54,28 @@ async function requirePermission(prisma: any, req: any, reply: any, connectionId
   });
 
   if (!allowed) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: "permission_denied",
+          userId,
+          requestId: req.id,
+          details: JSON.stringify({
+            category: "rbac",
+            type: "forbidden_connection_access",
+            severity: "warning",
+            actor: {
+              userId,
+              roles: req.user?.roles ?? [],
+              ip: req.ip,
+              userAgent: req.headers["user-agent"]
+            },
+            connectionId,
+            timestamp: new Date().toISOString()
+          })
+        }
+      });
+    } catch (_) {}
     reply.code(403).send({ error: "Forbidden — no permission for this connection" });
     return false;
   }
@@ -151,7 +190,7 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
 
       const tagsArray = Array.isArray(parsed.data.tags)
         ? parsed.data.tags
-        : parsed.data.tags?.split(",").map(t => t.trim()) ?? [];
+        : parsed.data.tags?.split(",").map((t: string) => t.trim()) ?? [];
 
       try {
         const table = await prisma.tableMetadata.upsert({
@@ -183,7 +222,7 @@ export async function metadataRoutes(app: FastifyInstance, prisma: PrismaClient)
     const allowed = await requirePermission(prisma, req, reply, connectionId);
     if (!allowed) return;
     if (!await requireRole(prisma, req, reply, ["admin", "analyst"])) return;
-    const tagsArray = Array.isArray(tags) ? tags : tags?.split(",").map(t => t.trim()) ?? [];
+    const tagsArray = Array.isArray(tags) ? tags : tags?.split(",").map((t: string) => t.trim()) ?? [];
 
     try {
       const table = await prisma.tableMetadata.upsert({

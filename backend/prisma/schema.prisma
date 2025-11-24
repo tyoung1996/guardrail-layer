@@ -59,6 +59,14 @@ model Connection {
   name           String
   dbType         String
   connectionUrl  String
+  // Structured connection fields (extended DB support)
+  host         String?
+  port         Int?
+  username     String?
+  password     String?
+  database     String?
+  ssl          Boolean?
+  extras       Json?
   status         String              @default("unknown") // active | down | checking | unknown
   lastChecked    DateTime            @default(now())
   createdAt      DateTime            @default(now())
@@ -194,6 +202,7 @@ model AuditLog {
   redacted     Boolean? // true if a redaction occurred
   performedBy  String? // user or system actor
   metadata     Json? // additional contextual info such as IP or timing
+  requestId    String?
   createdAt    DateTime @default(now())
 
   connection Connection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)

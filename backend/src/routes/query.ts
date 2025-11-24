@@ -4,6 +4,9 @@ import { z } from "zod";
 import type { PrismaClient } from "@prisma/client";
 import mysql from "mysql2/promise";
 import { Client as PgClient } from "pg";
+// @ts-ignore
+import mssql from "mssql";
+import Database from "better-sqlite3";
 
 /**
  * Query Routes
@@ -27,7 +30,56 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
     if (!s.startsWith("SELECT")) throw new Error("Only SELECT queries are allowed.");
     if (s.includes(";")) throw new Error("Multiple statements are not permitted.");
     const banned = ["INSERT ", "UPDATE ", "DELETE ", "DROP ", "ALTER ", "TRUNCATE ", "CREATE "];
-    if (banned.some(k => s.includes(k))) throw new Error("Write or DDL statements are not allowed.");
+    if (banned.some((k) => s.includes(k))) throw new Error("Write or DDL statements are not allowed.");
+  }
+
+  function buildActor(req: any) {
+    const u = req.user as any;
+    return {
+      userId: u?.userId ?? null,
+      email: u?.email ?? null,
+      roles: u?.roles ?? [],
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    };
+  }
+
+  async function audit(
+    prisma: PrismaClient,
+    req: any,
+    params: {
+      action: string;
+      category: string;
+      type: string;
+      severity: "info" | "warning" | "critical";
+      connectionId?: string;
+      sql?: string;
+      executionTime?: number;
+      rowCount?: number;
+      redactionsApplied?: boolean;
+      redactedColumns?: string[];
+      error?: any;
+      details?: any;
+    }
+  ) {
+    try {
+      const actor = buildActor(req);
+      await prisma.auditLog.create({
+        data: {
+          action: params.action,
+          userId: actor.userId,
+          connectionId: params.connectionId ?? null,
+          requestId: req.id,
+          details: JSON.stringify({
+            ...params,
+            actor,
+            timestamp: new Date().toISOString(),
+          }),
+        },
+      });
+    } catch (err) {
+      req.log?.error?.("Failed to log audit for query:", err);
+    }
   }
 
   /**
@@ -70,22 +122,59 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
       }
     }
 
-    const { dbType, connectionUrl } = connection;
+    const dbType = connection.dbType;
     let rows: any[] = [];
     const startTime = Date.now();
 
     try {
       if (dbType === "mysql") {
-        const pool = mysql.createPool(connectionUrl);
+        const pool = connection.connectionUrl
+          ? mysql.createPool(connection.connectionUrl)
+          : mysql.createPool({
+              host: connection.host!,
+              port: connection.port!,
+              user: connection.username!,
+              password: connection.password!,
+              database: connection.database!,
+            });
         const [result] = await pool.query(sql);
         rows = result as any[];
         await pool.end();
       } else if (dbType === "postgres") {
-        const client = new PgClient({ connectionString: connectionUrl });
+        const client = connection.connectionUrl
+          ? new PgClient({ connectionString: connection.connectionUrl })
+          : new PgClient({
+              host: connection.host!,
+              port: connection.port!,
+              user: connection.username!,
+              password: connection.password!,
+              database: connection.database!,
+            });
         await client.connect();
         const res = await client.query(sql);
         rows = res.rows;
         await client.end();
+      } else if (dbType === "mssql") {
+        const pool = await mssql.connect({
+          user: connection.username!,
+          password: connection.password!,
+          server: connection.host!,
+          port: connection.port!,
+          database: connection.database!,
+          options: { encrypt: true, trustServerCertificate: true },
+        });
+        const result = await pool.request().query(sql);
+        rows = result.recordset as any[];
+        await pool.close();
+      } else if (dbType === "sqlite") {
+        const dbPath = connection.database!;
+        const db = new Database(dbPath);
+        try {
+          const stmt = db.prepare(sql);
+          rows = stmt.all();
+        } finally {
+          db.close();
+        }
       } else {
         throw new Error(`Unsupported dbType: ${dbType}`);
       }
@@ -97,18 +186,17 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
       const appliedRules = redactions.length > 0;
       const hiddenColumns = redactions.map((r: any) => `${r.tableName}.${r.columnName}`);
 
-      // Log to audit
-      await prisma.auditLog.create({
-        data: {
-          action: "query_run",
-          connectionId,
-          details: JSON.stringify({
-            sql,
-            executionTime,
-            redactionsApplied: appliedRules,
-            redactedColumns: hiddenColumns,
-          }),
-        },
+      await audit(prisma, req, {
+        action: "query_run",
+        category: "query",
+        type: "run_manual_sql",
+        severity: "info",
+        connectionId,
+        sql,
+        executionTime,
+        rowCount: rows.length,
+        redactionsApplied: appliedRules,
+        redactedColumns: hiddenColumns,
       });
 
       return reply.send({
@@ -120,6 +208,15 @@ export async function queryRoutes(app: FastifyInstance, prisma: PrismaClient) {
       });
     } catch (e: any) {
       req.log.error(e);
+      await audit(prisma, req, {
+        action: "query_error",
+        category: "query",
+        type: "run_manual_sql",
+        severity: "critical",
+        connectionId,
+        sql,
+        error: e.message,
+      });
       return reply.code(500).send({ error: e.message });
     }
   });
