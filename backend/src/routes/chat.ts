@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import OpenAI from "openai";
 import util from "util";
-
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const Database = require("better-sqlite3");
 import type { PrismaClient } from "@prisma/client";
 import { verifyAuthToken } from "../plugins/authToken.js";
 
@@ -53,35 +56,51 @@ async function getRealSchema(connection: any) {
     return cached.schema;
   }
 
-  const { dbType, connectionUrl } = connection;
+  const { dbType } = connection;
   const schema: Record<string, { columns: Array<{ name: string; type: string }> }> = {};
 
-  if (dbType === 'mysql') {
-    const mysql = await import('mysql2/promise');
-    const pool = mysql.createPool(connectionUrl);
-    
-    const [tables] = await pool.query('SHOW TABLES');
-    const tableNames = (tables as any[]).map(row => Object.values(row)[0] as string);
-    
+  if (dbType === "mysql") {
+    const mysql = await import("mysql2/promise");
+    const pool = connection.connectionUrl
+      ? mysql.createPool(connection.connectionUrl)
+      : mysql.createPool({
+          host: connection.host ?? undefined,
+          port: connection.port ?? undefined,
+          user: connection.username ?? undefined,
+          password: connection.password ?? undefined,
+          database: connection.database ?? undefined,
+        });
+
+    const [tables] = await pool.query("SHOW TABLES");
+    const tableNames = (tables as any[]).map((row) => Object.values(row)[0] as string);
+
     for (const table of tableNames) {
       const [cols] = await pool.query(`SHOW COLUMNS FROM \`${table}\``);
       schema[table] = {
-        columns: (cols as any[]).map(c => ({
+        columns: (cols as any[]).map((c) => ({
           name: c.Field,
-          type: c.Type
-        }))
+          type: c.Type,
+        })),
       };
     }
     await pool.end();
-  } else if (dbType === 'postgres') {
-    const { Client } = await import('pg');
-    const client = new Client({ connectionString: connectionUrl });
+  } else if (dbType === "postgres") {
+    const { Client } = await import("pg");
+    const client = connection.connectionUrl
+      ? new Client({ connectionString: connection.connectionUrl })
+      : new Client({
+          host: connection.host ?? undefined,
+          port: connection.port ?? undefined,
+          user: connection.username ?? undefined,
+          password: connection.password ?? undefined,
+          database: connection.database ?? undefined,
+        });
     await client.connect();
-    
-    const schemaWhitelist = (process.env.SCHEMA_WHITELIST ?? 'public')
-      .split(',')
-      .map(s => s.trim());
-    
+
+    const schemaWhitelist = (process.env.SCHEMA_WHITELIST ?? "public")
+      .split(",")
+      .map((s: string) => s.trim());
+
     const res = await client.query(
       `
       SELECT table_name, column_name, data_type
@@ -91,7 +110,7 @@ async function getRealSchema(connection: any) {
       `,
       [schemaWhitelist]
     );
-    
+
     for (const row of res.rows) {
       const tableName = row.table_name;
       if (!schema[tableName]) {
@@ -99,10 +118,66 @@ async function getRealSchema(connection: any) {
       }
       schema[tableName].columns.push({
         name: row.column_name,
-        type: row.data_type
+        type: row.data_type,
       });
     }
     await client.end();
+  } else if (dbType === "mssql") {
+    // @ts-ignore — mssql has no types
+    const mssqlMod = await import("mssql");
+    const mssql = (mssqlMod as any).default ?? mssqlMod;
+
+    const pool = await mssql.connect({
+      user: connection.username ?? undefined,
+      password: connection.password ?? undefined,
+      server: connection.host ?? undefined,
+      port: connection.port ?? undefined,
+      database: connection.database ?? undefined,
+      options: { encrypt: true, trustServerCertificate: true }
+    });
+
+    const result = await pool.request().query(`
+      SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      ORDER BY TABLE_NAME, ORDINAL_POSITION;
+    `);
+
+    for (const row of result.recordset) {
+      const tableName = row.TABLE_NAME;
+      if (!schema[tableName]) schema[tableName] = { columns: [] };
+      schema[tableName].columns.push({
+        name: row.COLUMN_NAME,
+        type: row.DATA_TYPE,
+      });
+    }
+
+    await pool.close();
+  } else if (dbType === "sqlite") {
+    // Use better-sqlite3 for synchronous, reliable SQLite access
+    const dbPath = connection.database ?? "";
+    const db = new Database(dbPath);
+
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+
+    for (const t of tables as Array<{ name: string }>) {
+      const cols = db.prepare(`PRAGMA table_info(${t.name})`).all() as Array<{
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: any;
+        pk: number;
+      }>;
+
+      schema[t.name] = {
+        columns: cols.map((c) => ({
+          name: c.name,
+          type: c.type
+        }))
+      };
+    }
+
+    db.close();
   }
   
   // Cache the schema
@@ -111,7 +186,7 @@ async function getRealSchema(connection: any) {
   return schema;
 }
 
-app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
+app.post('/chat', { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const Body = z.object({
       question: z.string().min(5),
       connectionId: z.string(),
@@ -130,7 +205,7 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
       where: { userId },
       select: { roleId: true }
     });
-    const roleIds = userRoles.map(r => r.roleId);
+    const roleIds = userRoles.map((r: { roleId: any; }) => r.roleId);
 
     // 1. Load user to see if admin
     const user = await prisma.user.findUnique({
@@ -285,7 +360,7 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
       });
       // Debug log after loading metadata
       console.log("🧠 Metadata tables loaded:", metadata.length);
-      const metadataMap = new Map(metadata.map(m => [m.tableName, m]));
+      const metadataMap = new Map(metadata.map((m: { tableName: any; }) => [m.tableName, m]));
   
       // Build filtered schema (remove redacted columns)
       const filteredSchema: RealSchema = {};
@@ -314,9 +389,9 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
       // Build metadataHints block
       const metadataHints = metadata.length
         ? `\nMETADATA HINTS:\n${metadata
-            .map(m => {
+            .map((m: { columns: any[]; tableName: any; description: any; }) => {
               const colHints = m.columns
-                .map(c => `- ${m.tableName}.${c.columnName}: ${c.description ?? "No description"}`)
+                .map((c: { columnName: any; description: any; }) => `- ${m.tableName}.${c.columnName}: ${c.description ?? "No description"}`)
                 .join('\n');
               return `TABLE ${m.tableName}:\nDescription: ${m.description ?? "None"}\n${colHints}`;
             })
@@ -375,14 +450,31 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
   - Always use the most relevant date column from DATE/TIME COLUMNS when filtering (e.g. started_at, created_at, or updated_at).
   `;
   
+      const dbType = connection.dbType;
+      let dialectLabel = "SQL";
+      let limitRule = "Always include LIMIT 100 for potentially large results";
+      let dialectNotes = "";
+
+      if (dbType === "mysql") {
+        dialectLabel = "MySQL";
+      } else if (dbType === "postgres") {
+        dialectLabel = "PostgreSQL";
+      } else if (dbType === "mssql") {
+        dialectLabel = "SQL Server";
+        limitRule = "When limiting large result sets, use SELECT TOP 100 rather than LIMIT.";
+        dialectNotes = "For SQL Server, place TOP 100 immediately after SELECT (e.g., SELECT TOP 100 * FROM ...).";
+      } else if (dbType === "sqlite") {
+        dialectLabel = "SQLite";
+      }
+
       const systemPrompt = `${semanticPriorityBlock}
   ${temporalAnchorBlock}
-  You are an expert SQL assistant. Generate accurate ${connection.dbType === 'mysql' ? 'MySQL' : 'PostgreSQL'} SELECT queries using ONLY the provided schema.
+  You are an expert ${dialectLabel} assistant. Generate accurate ${dialectLabel} SELECT queries using ONLY the provided schema.
   
   CRITICAL RULES:
   1. Use ONLY columns that exist in the schema below
   2. Use ONLY tables that exist in the schema below
-  3. Always include LIMIT 100 for potentially large results
+  3. ${limitRule}
   4. Use the relationship hints to JOIN tables correctly
   5. When metadata describes relationships (e.g. "pto_type_id relates to pto_types"), always use that for JOIN logic.
   6. If metadata notes that a column "relates to" or "references" another table, JOIN using that relationship.
@@ -391,9 +483,10 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
   9. For names/text fields, use the NAME/TEXT COLUMNS listed
   10. Never invent column names - if you can't find what you need, use ID columns and join
   11. Output ONLY the SQL query, no explanations, comments, or markdown
-  12. For "latest" or "most recent" queries, use ORDER BY with date columns DESC and LIMIT 1
+  12. For "latest" or "most recent" queries, use ORDER BY with date columns DESC and LIMIT 1 (or TOP 1 in SQL Server)
   13. For "who" questions, always join to get names if possible, don't just return IDs
-  14. When filtering by text (like 'status', 'type', 'name', or 'description'), use case-insensitive fuzzy matching (e.g., LOWER(column) LIKE '%keyword%') instead of exact equality, unless an exact match is clearly required.`;
+  14. When filtering by text (like 'status', 'type', 'name', or 'description'), use case-insensitive fuzzy matching (e.g., LOWER(column) LIKE '%keyword%') instead of exact equality, unless an exact match is clearly required.
+  15. ${dialectNotes}`;
   
       // --- Insert dynamic time context right before userPrompt ---
       const now = new Date();
@@ -440,6 +533,7 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
       console.log("USER:\n", userPrompt);
   
       // Generate SQL with retry logic
+      const startTime = Date.now();
       let sql = "";
       let attempts = 0;
       let lastError = "";
@@ -489,17 +583,58 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req, reply) => {
           let rows: any[] = [];
           if (connection.dbType === "mysql") {
             const mysql = await import("mysql2/promise");
-            const pool = mysql.createPool(connection.connectionUrl);
+            const pool = connection.connectionUrl
+              ? mysql.createPool(connection.connectionUrl)
+              : mysql.createPool({
+                  host: connection.host ?? undefined,
+                  port: connection.port ?? undefined,
+                  user: connection.username ?? undefined,
+                  password: connection.password ?? undefined,
+                  database: connection.database ?? undefined,
+                });
             const [result] = await pool.query(sql);
             rows = result as any[];
             await pool.end();
           } else if (connection.dbType === "postgres") {
             const { Client } = await import("pg");
-            const client = new Client({ connectionString: connection.connectionUrl });
+            const client = connection.connectionUrl
+              ? new Client({ connectionString: connection.connectionUrl })
+              : new Client({
+                  host: connection.host ?? undefined,
+                  port: connection.port ?? undefined,
+                  user: connection.username ?? undefined,
+                  password: connection.password ?? undefined,
+                  database: connection.database ?? undefined,
+                });
             await client.connect();
             const res = await client.query(sql);
             rows = res.rows;
             await client.end();
+          } else if (connection.dbType === "mssql") {
+            // @ts-ignore — mssql has no types
+            const mssqlMod = await import("mssql");
+            const mssql = (mssqlMod as any).default ?? mssqlMod;
+
+            const pool = await mssql.connect({
+              user: connection.username ?? undefined,
+              password: connection.password ?? undefined,
+              server: connection.host ?? undefined,
+              port: connection.port ?? undefined,
+              database: connection.database ?? undefined,
+              options: { encrypt: true, trustServerCertificate: true }
+            });
+
+            const result = await pool.request().query(sql);
+            rows = result.recordset as any[];
+            await pool.close();
+          } else if (connection.dbType === "sqlite") {
+            // Use better-sqlite3 for SQLite execution
+            
+            const dbPath = connection.database ?? "";
+            const db = new Database(dbPath);
+            const stmt = db.prepare(sql);
+            rows = stmt.all();
+            db.close();
           }
   
           // 🔍 Raw SQL rows BEFORE redaction
@@ -620,7 +755,7 @@ Provide a clear, natural-language answer to the user's question based on this da
           };
           
           // Count global regex hits in redactedRows
-          const globalRegexHits = globalPatterns.filter(r =>
+          const globalRegexHits = globalPatterns.filter((r: { pattern: string | RegExp; }) =>
             new RegExp(r.pattern, "gi").test(JSON.stringify(redactedRows))
           ).length;
           ruleSummary["GLOBAL_REGEX"] = globalRegexHits;
@@ -635,19 +770,26 @@ Provide a clear, natural-language answer to the user's question based on this da
           await prisma.auditLog.create({
             data: {
               action: 'chat_query',
+              connectionId,
+              userId,
+              requestId: req.id,
               details: JSON.stringify({
                 question,
                 sql,
+                rowCount: rows.length,
+                summary,
+                executionMs: Date.now() - startTime,
                 redactionsApplied: appliedRedactions.length > 0,
                 redactionImpact: {
                   hiddenColumns: actuallyRemoved,
                   maskedColumns: Array.from(maskedColumns),
                   hashApplied: Array.from(hashApplied),
                   removedFromSchema: actuallyRemoved,
-                  ruleSummary,
+                  ruleSummary
                 },
-              }),
-              connectionId,
+                globalRegexHits,
+                timestamp: new Date().toISOString()
+              })
             },
           });
           return reply.send({
@@ -688,7 +830,7 @@ Provide a clear, natural-language answer to the user's question based on this da
   app.post(
     "/api/chat/external",
     { preHandler: verifyAuthToken },
-    async (req, reply) => {
+    async (req: FastifyRequest, reply: FastifyReply) => {
       const Body = z.object({
         message: z.string().min(1),
         connectionId: z.string()

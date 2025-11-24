@@ -7,7 +7,7 @@ import bcrypt from 'bcrypt';
 export async function authRoutes(app: FastifyInstance, prisma: PrismaClient) {
 
   // REGISTER
-  app.post('/auth/register', async (req, reply) => {
+  app.post('/auth/register', async (req: any, reply: any) => {
     const Body = z.object({
       email: z.string().email().or(z.string().endsWith("@localhost")),
       password: z.string().min(6),
@@ -32,7 +32,7 @@ export async function authRoutes(app: FastifyInstance, prisma: PrismaClient) {
   });
 
   // LOGIN
-  app.post('/auth/login', async (req, reply) => {
+  app.post('/auth/login', async (req: any, reply: any) => {
     const Body = z.object({
       email: z.string().email().or(z.string().endsWith("@localhost")),
       password: z.string().min(1),
@@ -69,7 +69,7 @@ export async function authRoutes(app: FastifyInstance, prisma: PrismaClient) {
       userId: user.id,
       email: user.email,
       isAdmin: userWithRoles?.isAdmin ?? false,
-      roles: userWithRoles?.roles.map(r => r.role.name) ?? []
+      roles: userWithRoles?.roles.map((r: any) => r.role.name) ?? []
     });
 
     await prisma.user.update({
@@ -105,7 +105,7 @@ export async function authRoutes(app: FastifyInstance, prisma: PrismaClient) {
       id: dbUser?.id,
       email: dbUser?.email,
       isAdmin: dbUser?.isAdmin ?? false,
-      roles: dbUser?.roles.map(r => r.role.name) ?? []
+      roles: dbUser?.roles.map((r: any) => r.role.name) ?? []
     });
   });
 }

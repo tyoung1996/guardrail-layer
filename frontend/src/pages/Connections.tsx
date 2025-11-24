@@ -34,6 +34,11 @@ export default function Connections() {
     name: "",
     dbType: "mysql",
     connectionUrl: "",
+    host: "",
+    port: "",
+    username: "",
+    password: "",
+    database: "",
     userId: ""
   });
   useEffect(() => {
@@ -65,17 +70,47 @@ export default function Connections() {
       window.alert("Demo mode — adding new connections is disabled.");
       return;
     }
-    if (!newConn.name || !newConn.connectionUrl) {
-      window.alert("⚠️ Please fill in all fields before adding a connection.");
+    // Updated validation logic
+    if (!newConn.name) {
+      alert("⚠️ Name is required.");
+      return;
+    }
+    if (newConn.dbType === "sqlite") {
+      if (!newConn.database) {
+        alert("⚠️ SQLite requires a file path.");
+        return;
+      }
+    } else if (
+      !newConn.connectionUrl &&
+      (
+        !newConn.host ||
+        !newConn.port ||
+        !newConn.username ||
+        !newConn.password ||
+        !newConn.database
+      )
+    ) {
+      alert("⚠️ Please fill either a connection URL or all structured fields.");
       return;
     }
     await axios.post(`${API_URL}/connections`, {
       ...newConn,
-      userId: user.userId
+      port: newConn.port ? Number(newConn.port) : undefined,
+      userId: user.userId,
     }, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    setNewConn({ name: "", dbType: "mysql", connectionUrl: "", userId: user.userId });
+    setNewConn({
+      name: "",
+      dbType: "mysql",
+      connectionUrl: "",
+      host: "",
+      port: "",
+      username: "",
+      password: "",
+      database: "",
+      userId: user.userId
+    });
     setTestStatus("idle");
     setTestMessage("");
     fetchConnections();
@@ -96,22 +131,48 @@ export default function Connections() {
   }
 
   async function testConnection() {
-    if (!newConn.connectionUrl) {
+    // Validation for test
+    if (!newConn.name) {
       setTestStatus("error");
-      setTestMessage("⚠️ Please enter a connection URL first.");
+      setTestMessage("⚠️ Name is required.");
+      return;
+    }
+    if (newConn.dbType === "sqlite") {
+      if (!newConn.database) {
+        setTestStatus("error");
+        setTestMessage("⚠️ SQLite requires a file path.");
+        return;
+      }
+    } else if (
+      !newConn.connectionUrl &&
+      (
+        !newConn.host ||
+        !newConn.port ||
+        !newConn.username ||
+        !newConn.password ||
+        !newConn.database
+      )
+    ) {
+      setTestStatus("error");
+      setTestMessage("⚠️ Please fill either a connection URL or all structured fields.");
       return;
     }
     setTestStatus("loading");
     setTestMessage("");
     try {
       const res = await axios.post(`${API_URL}/connections/test`, {
-        dbType: newConn.dbType,
-        connectionUrl: newConn.connectionUrl,
-        userId: user.userId
+        ...newConn,
+        port: newConn.port ? Number(newConn.port) : undefined,
+        userId: user.userId,
       });
       if (res.data.ok) {
-        setTestStatus("success");
-        setTestMessage("✅ Connection successful");
+        if (res.data.warning) {
+          setTestStatus("success");
+          setTestMessage("⚠️ " + res.data.warning);
+        } else {
+          setTestStatus("success");
+          setTestMessage("✅ Connection successful");
+        }
       } else {
         setTestStatus("error");
         setTestMessage(res.data.error || "❌ Connection failed");
@@ -246,19 +307,103 @@ export default function Connections() {
             </div>
 
             {/* URL */}
-            <div className="md:col-span-3">
-              <label htmlFor="connectionUrl" className="block text-sm font-medium text-gray-300 mb-1">
-                Connection URL
-              </label>
-              <input
-                id="connectionUrl"
-                type="text"
-                value={newConn.connectionUrl}
-                onChange={(e) => setNewConn({ ...newConn, connectionUrl: e.target.value, userId: user.userId })}
-                placeholder="postgresql://user:pass@host:5432/dbname"
-                className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-              />
-            </div>
+            {newConn.dbType !== "sqlite" && (
+              <div className="md:col-span-3">
+                <details className="group bg-[#12151c] border border-gray-700 rounded-lg p-4">
+                  <summary className="cursor-pointer text-gray-300 font-medium flex items-center justify-between">
+                    Advanced Options
+                    <span className="text-xs text-gray-500 group-open:hidden">Show</span>
+                    <span className="text-xs text-gray-500 hidden group-open:inline">Hide</span>
+                  </summary>
+
+                  <div className="mt-4">
+                    <label htmlFor="connectionUrl" className="block text-sm font-medium text-gray-300 mb-1">
+                      Connection URL (optional)
+                    </label>
+                    <input
+                      id="connectionUrl"
+                      type="text"
+                      value={newConn.connectionUrl}
+                      onChange={(e) => setNewConn({ ...newConn, connectionUrl: e.target.value, userId: user.userId })}
+                      placeholder="postgresql://user:pass@host:5432/dbname"
+                      className="w-full px-3 py-2 rounded-lg bg-[#0d0f14] border border-gray-700 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      If provided, this will override Host / Port / Username / Password / Database fields.
+                    </p>
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {/* Structured Fields */}
+            {newConn.dbType !== "sqlite" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Host</label>
+                  <input
+                    type="text"
+                    value={newConn.host}
+                    onChange={(e) => setNewConn({ ...newConn, host: e.target.value })}
+                    placeholder="localhost or 127.0.0.1"
+                    className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Port</label>
+                  <input
+                    type="text"
+                    value={newConn.port}
+                    onChange={(e) => setNewConn({ ...newConn, port: e.target.value })}
+                    placeholder="3306 / 5432 / 1433"
+                    className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
+                  <input
+                    type="text"
+                    value={newConn.username}
+                    onChange={(e) => setNewConn({ ...newConn, username: e.target.value })}
+                    placeholder="database user"
+                    className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={newConn.password}
+                    onChange={(e) => setNewConn({ ...newConn, password: e.target.value })}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Database Name</label>
+                  <input
+                    type="text"
+                    value={newConn.database}
+                    onChange={(e) => setNewConn({ ...newConn, database: e.target.value })}
+                    placeholder="dbname"
+                    className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                  />
+                </div>
+              </>
+            )}
+            {/* SQLite-specific field */}
+            {newConn.dbType === "sqlite" && (
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-300 mb-1">SQLite File Path</label>
+                <input
+                  type="text"
+                  value={newConn.database}
+                  onChange={(e) => setNewConn({ ...newConn, database: e.target.value })}
+                  placeholder="/path/to/db.sqlite"
+                  className="w-full px-3 py-2 rounded-lg bg-[#12151c] border border-gray-700 text-gray-100"
+                />
+              </div>
+            )}
           </div>
 
           {/* Actions */}
