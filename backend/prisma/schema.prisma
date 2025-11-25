@@ -21,25 +21,27 @@ model User {
   updatedAt DateTime  @updatedAt
 
   // relations
-  connections Connection[]
-  apiTokens   ApiToken[]
-  roles        UserRole[]
+  connections           Connection[]
+  apiTokens             ApiToken[]
+  roles                 UserRole[]
   connectionPermissions ConnectionPermission[] @relation("UserConnectionPermissions")
-  userRedactions UserRedaction[]
-  auditLogs    AuditLog[]
+  userRedactions        UserRedaction[]
+  auditLogs             AuditLog[]
+  chatSessions          ChatSession[]          @relation("UserChatSessions")
+  chatMessages          ChatMessage[]          @relation("UserChatMessages")
 }
 
 model Role {
-  id          String     @id @default(cuid())
-  name        String     @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
   label       String?
   description String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  users       UserRole[]
+  users                 UserRole[]
   connectionPermissions ConnectionPermission[] @relation("RoleConnectionPermissions")
-  roleRedactions RoleRedaction[]
+  roleRedactions        RoleRedaction[]
 }
 
 model UserRole {
@@ -53,23 +55,23 @@ model UserRole {
 }
 
 model Connection {
-  id             String              @id @default(cuid())
+  id             String                 @id @default(cuid())
   userId         String?
-  user           User?               @relation(fields: [userId], references: [id])
+  user           User?                  @relation(fields: [userId], references: [id])
   name           String
   dbType         String
   connectionUrl  String
   // Structured connection fields (extended DB support)
-  host         String?
-  port         Int?
-  username     String?
-  password     String?
-  database     String?
-  ssl          Boolean?
-  extras       Json?
-  status         String              @default("unknown") // active | down | checking | unknown
-  lastChecked    DateTime            @default(now())
-  createdAt      DateTime            @default(now())
+  host           String?
+  port           Int?
+  username       String?
+  password       String?
+  database       String?
+  ssl            Boolean?
+  extras         Json?
+  status         String                 @default("unknown") // active | down | checking | unknown
+  lastChecked    DateTime               @default(now())
+  createdAt      DateTime               @default(now())
   rules          GuardrailRule[]
   queries        QueryLog[]
   redactions     RedactionRule[]
@@ -80,17 +82,18 @@ model Connection {
   permissions    ConnectionPermission[]
   roleRedactions RoleRedaction[]
   userRedactions UserRedaction[]
+  chatSessions   ChatSession[]          @relation("ConnectionChatSessions")
 }
 
 model ConnectionPermission {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   connectionId String
   userId       String?
   roleId       String?
 
-  connection   Connection @relation(fields: [connectionId], references: [id])
-  user         User?      @relation("UserConnectionPermissions", fields: [userId], references: [id])
-  role         Role?      @relation("RoleConnectionPermissions", fields: [roleId], references: [id])
+  connection Connection @relation(fields: [connectionId], references: [id])
+  user       User?      @relation("UserConnectionPermissions", fields: [userId], references: [id])
+  role       Role?      @relation("RoleConnectionPermissions", fields: [roleId], references: [id])
 
   @@index([connectionId])
 }
@@ -130,31 +133,31 @@ model RedactionRule {
 }
 
 model RoleRedaction {
-  id           String   @id @default(cuid())
+  id           String @id @default(cuid())
   roleId       String
   connectionId String
   rules        Json
 
-  role        Role       @relation(fields: [roleId], references: [id])
-  connection  Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id])
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([roleId, connectionId])
 }
 
 model UserRedaction {
-  id           String   @id @default(cuid())
+  id           String @id @default(cuid())
   userId       String
   connectionId String
   rules        Json
 
-  user        User       @relation(fields: [userId], references: [id])
-  connection  Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, connectionId])
 }
@@ -252,4 +255,37 @@ model ApiLog {
   createdAt  DateTime @default(now())
 
   token ApiToken @relation(fields: [tokenId], references: [id])
+}
+
+model ChatSession {
+  id           String  @id @default(cuid())
+  userId       String?
+  connectionId String?
+
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user       User?         @relation("UserChatSessions", fields: [userId], references: [id])
+  connection Connection?   @relation("ConnectionChatSessions", fields: [connectionId], references: [id])
+  messages   ChatMessage[]
+
+  @@index([userId])
+  @@index([connectionId])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  sessionId  String
+  userId     String?
+  role       String // "user" | "assistant"
+  content    String
+  tokenCount Int?
+  createdAt  DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User?       @relation("UserChatMessages", fields: [userId], references: [id])
+
+  @@index([sessionId, createdAt])
 }

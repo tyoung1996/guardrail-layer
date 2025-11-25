@@ -1,12 +1,13 @@
 import axios from "../lib/axios";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function RoleDetail() {
   const { user, token } = useAuth();
+  const navigate = useNavigate();
   const { id } = useParams();
   const isNew = !id || id === "new";
   const [role, setRole] = useState<any>(null);
@@ -18,6 +19,12 @@ export default function RoleDetail() {
   const [allowedConnections, setAllowedConnections] = useState<any[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [roleRedactionJson, setRoleRedactionJson] = useState("{}");
+  const [toast, setToast] = useState("");
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  }
 
   async function loadRole() {
     if (isNew) {
@@ -63,7 +70,8 @@ export default function RoleDetail() {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert("Created");
+      showToast("Role created!");
+      setTimeout(() => navigate("/roles"), 500);
       return;
     }
 
@@ -73,7 +81,8 @@ export default function RoleDetail() {
     }, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    alert("Saved");
+    showToast("Role updated!");
+    setTimeout(() => navigate("/roles"), 500);
   }
 
   async function toggleUser(userId: string, isAssigned: boolean) {
@@ -124,6 +133,11 @@ export default function RoleDetail() {
 
   return (
     <div className="max-w-3xl mx-auto p-8 text-gray-100">
+      {toast && (
+        <div className="mb-4 p-3 rounded-lg bg-emerald-600 text-white text-center shadow-lg">
+          {toast}
+        </div>
+      )}
       <h1 className="text-3xl font-bold mb-6">
         {isNew ? "Create Role" : "Edit Role"}
       </h1>
@@ -236,13 +250,13 @@ export default function RoleDetail() {
                 <p className="text-gray-400 italic">Admin role always sees full unredacted data. No role‑based redactions apply.</p>
               ) : (
                 allowedConnections.map((conn: any) => (
-                  <a
+                  <Link
                     key={conn.id}
-                    href={`/roles/${id}/redactions/${conn.id}`}
+                    to={`/roles/${id}/redactions/${conn.id}`}
                     className="block px-4 py-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 text-white"
                   >
                     Open Redaction Editor for {conn.name}
-                  </a>
+                  </Link>
                 ))
               )}
             </div>

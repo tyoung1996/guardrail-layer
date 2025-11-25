@@ -186,15 +186,95 @@ async function getRealSchema(connection: any) {
   return schema;
 }
 
+// ------------------ CHAT SESSIONS -----------------------
+// List chat sessions with preview of last message
+app.get("/chat/sessions", { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  const userId = (req.user as any)?.userId;
+
+  const sessions = await prisma.chatSession.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { content: true, role: true, createdAt: true }
+      }
+    }
+  });
+
+  return reply.send(
+    sessions.map(s => ({
+      id: s.id,
+      title: s.title,
+      updatedAt: s.updatedAt,
+      lastMessage: s.messages[0]?.content ?? null
+    }))
+  );
+});
+
+app.post("/chat/session", { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  const userId = (req.user as any)?.userId;
+  const { connectionId } = req.body as { connectionId: string };
+
+  const session = await prisma.chatSession.create({
+    data: { userId, connectionId }
+  });
+
+  return reply.send(session);
+});
+
+// Rename chat session
+app.patch("/chat/session/:id", { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  const userId = (req.user as any)?.userId;
+  const { id } = req.params as any;
+  const { title } = req.body as { title: string };
+
+  const updated = await prisma.chatSession.update({
+    where: { id, userId },
+    data: { title }
+  });
+
+  return reply.send(updated);
+});
+
+// Delete chat session and its messages
+app.delete("/chat/session/:id", { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  const userId = (req.user as any)?.userId;
+  const { id } = req.params as any;
+
+  // delete messages first
+  await prisma.chatMessage.deleteMany({ where: { sessionId: id } });
+
+  // delete session
+  await prisma.chatSession.delete({
+    where: { id, userId }
+  });
+
+  return reply.send({ success: true });
+});
+
+app.get("/chat/:sessionId/messages", { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  const { sessionId } = req.params as any;
+
+  const messages = await prisma.chatMessage.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: "asc" }
+  });
+
+  return reply.send(messages);
+});
+
 app.post('/chat', { preHandler: (app as any).auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const Body = z.object({
       question: z.string().min(5),
       connectionId: z.string(),
+      sessionId: z.string().optional(),
     });
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
-    const { question, connectionId } = parsed.data;
+    const { question, connectionId, sessionId: incomingSessionId } = parsed.data;
     if (!openai) return reply.code(400).send({ error: "OPENAI_API_KEY not set" });
 
     // --- RBAC Permission Check ---
@@ -236,7 +316,42 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req: FastifyRequest,
     try {
       const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
       if (!connection) return reply.code(404).send({ error: "Connection not found" });
-  
+
+      // --- Ensure chat session exists / is updated ---
+      let sessionId = incomingSessionId ?? null;
+
+      if (sessionId) {
+        // Try to update existing session; if it fails (not found), we'll create a new one.
+        const existing = await prisma.chatSession
+          .update({
+            where: { id: sessionId },
+            data: {
+              // keep it minimal: let Prisma's @updatedAt handle timestamps
+              connectionId,
+            },
+          })
+          .catch(() => null);
+
+        if (!existing) {
+          const created = await prisma.chatSession.create({
+            data: {
+              userId,
+              connectionId,
+            },
+          });
+          sessionId = created.id;
+        }
+      } else {
+        // No session provided: create a new one linked to this user + connection
+        const created = await prisma.chatSession.create({
+          data: {
+            userId,
+            connectionId,
+          },
+        });
+        sessionId = created.id;
+      }
+
       // Get REAL schema from database (cached)
       const realSchema: RealSchema = await getRealSchema(connection) as RealSchema;
       // Debug log after fetching real schema
@@ -467,6 +582,40 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req: FastifyRequest,
         dialectLabel = "SQLite";
       }
 
+      // --- Load last 10 messages for memory ---
+      const recentMessages = await prisma.chatMessage.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        take: 10
+      });
+
+      // Build raw memory transcript
+      const rawMemory = recentMessages
+        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+        .join('\n');
+
+      // Summarize memory for compactness
+      let memorySummary = "";
+      try {
+        const memResp = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "Summarize prior conversation into a short list of key facts. Keep only items useful for resolving pronouns (e.g., who 'they' refers to, entities discussed, important results). Do NOT invent details."},
+            { role: "user", content: rawMemory }
+          ],
+          temperature: 0.1
+        });
+
+        memorySummary = memResp.choices[0]?.message?.content?.trim() ?? "";
+      } catch (err) {
+        memorySummary = "";
+      }
+
+      // Memory block used in prompts
+      const memoryContextBlock = memorySummary
+        ? `\nCONVERSATION CONTEXT:\n${memorySummary}\n`
+        : "";
+
       const systemPrompt = `${semanticPriorityBlock}
   ${temporalAnchorBlock}
   You are an expert ${dialectLabel} assistant. Generate accurate ${dialectLabel} SELECT queries using ONLY the provided schema.
@@ -506,26 +655,24 @@ app.post('/chat', { preHandler: (app as any).auth }, async (req: FastifyRequest,
   Last month ran from ${lastMonthStr}-01 to ${lastMonthStr}-${lastMonthDays}.
   `;
   
-      const userPrompt = `${timeContext}
-  User question: "${question}"
-  
-  DATABASE SCHEMA:
-  ${schemaLines.join('\n\n')}
-  ${relationshipHints}
-  ${dateHint}
-  ${nameHint}
-  ${metadataHints}
-  
-  IMPORTANT REMINDERS:
-  - Do NOT invent columns like "pto_date", "employee_id", "date_taken" if they don't exist
-  - Use metadata relationships when joining tables (e.g. if "pto_type_id" relates to "pto_types.id", join them)
-  - For PTO queries, look for tables like "pto_requests" or "time_off" with date columns
-  - For organization/client queries, look for "organization_id" or "client_id" foreign keys
-  - For user queries, always try to join to a users/employees table to get names
-  - Use ORDER BY with DESC for "latest" or "most recent" queries
-  - Use GROUP BY and COUNT(*) for "most" or "how many" questions
-  
-  Generate a single SELECT query to answer the question.`;
+      const userPrompt = `${memoryContextBlock}
+${timeContext}
+User question: "${question}"
+
+DATABASE SCHEMA:
+${schemaLines.join('\n\n')}
+${relationshipHints}
+${dateHint}
+${nameHint}
+${metadataHints}
+
+IMPORTANT REMINDERS:
+- Use conversation context above to resolve pronouns such as "they", "it", "their".
+- Do NOT invent columns like "pto_date", "employee_id", "date_taken".
+- Use metadata relationships when joining tables.
+- For "latest" queries, use ORDER BY DESC on date columns.
+- Return ONLY a SELECT query, no explanations.
+`;
   
       // Debug log before sending prompt to OpenAI
       console.log("📤 OpenAI prompt:");
@@ -792,7 +939,28 @@ Provide a clear, natural-language answer to the user's question based on this da
               })
             },
           });
+          // Save user message
+          await prisma.chatMessage.create({
+            data: {
+              sessionId,
+              userId,
+              role: "user",
+              content: question,
+            }
+          });
+
+          // Save assistant response
+          await prisma.chatMessage.create({
+            data: {
+              sessionId,
+              userId,
+              role: "assistant",
+              content: summary,
+            }
+          });
+
           return reply.send({
+            sessionId,
             sql,
             summary,
             rowCount: rows.length,
